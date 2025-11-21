@@ -1,0 +1,2 @@
+# GassLangsung
+Berfungsi untuk Transportasi 
