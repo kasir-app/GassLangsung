@@ -4,23 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OjekWarga - Super App</title>
+    
+    <!-- Styling: Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Import Library Terbaru -->
     <script type="importmap">
     {
         "imports": {
             "react": "https://esm.sh/react@18.2.0",
             "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-            "lucide-react": "https://esm.sh/lucide-react@0.263.1",
+            "lucide-react": "https://esm.sh/lucide-react@latest", 
             "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
             "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
             "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
         }
     }
     </script>
+    
+    <!-- Babel untuk JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f3f4f6; }
-        .loader { border: 3px solid #f3f3f3; border-radius: 50%; border-top: 3px solid #3498db; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        .loader { border: 3px solid #f3f3f3; border-radius: 50%; border-top: 3px solid #f97316; width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -56,37 +63,41 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-        const appId = "ojek-warga-prod-v1";
+        const appId = "ojek-warga-prod-v2"; // Versi Baru agar bersih
 
         const ADMIN_SECRET_PIN = '888888';
         const OWNER_SECRET_PIN = '769108';
         const MASTER_RESET_CODE = '888888';
         const ADMIN_FEE = 0.15;
+        const ADMIN_WA_NUMBER = '6281311314203';
+        const ITEMS_PER_PAGE = 5;
 
         // --- COMPONENTS ---
         const Card = ({ children, className="" }) => <div className={`bg-white rounded-2xl shadow-sm p-5 border border-gray-100 ${className}`}>{children}</div>;
         
-        const Badge = ({ status }) => {
+        const Badge = ({ status, type }) => {
             const colors = { pending: 'bg-yellow-100 text-yellow-700', accepted: 'bg-blue-100 text-blue-700', completed: 'bg-green-100 text-green-700', cancelled: 'bg-red-100 text-red-700' };
-            return <span className={`px-2 py-1 rounded text-xs font-bold ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
+            return <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
         };
 
         const LocationInput = ({ label, placeholder, onSelect, initialValue, readOnly }) => {
             const [val, setVal] = useState(initialValue || '');
             const [res, setRes] = useState([]);
             const [open, setOpen] = useState(false);
+            const [loading, setLoading] = useState(false);
             
             useEffect(() => { setVal(initialValue || ''); }, [initialValue]);
 
             useEffect(() => {
-                if(readOnly || val.length < 3) return;
+                if(readOnly || !val || val.length < 3) return;
                 const timer = setTimeout(async () => {
+                    setLoading(true);
                     try {
-                        const req = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${val}&countrycodes=id&limit=5`);
+                        const req = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&countrycodes=id&limit=5`);
                         const data = await req.json();
                         setRes(data || []);
                         if(!readOnly) setOpen(true);
-                    } catch(e) {}
+                    } catch(e) {} finally { setLoading(false); }
                 }, 800);
                 return () => clearTimeout(timer);
             }, [val, readOnly]);
@@ -97,12 +108,13 @@
                     <div className="relative">
                         <MapPin size={16} className="absolute left-3 top-3 text-gray-400"/>
                         <input 
-                            className={`w-full pl-10 p-2 border rounded-lg text-sm ${readOnly ? 'bg-gray-100 text-gray-500' : 'bg-white'}`}
+                            className={`w-full pl-10 p-2 border rounded-lg text-sm ${readOnly ? 'bg-gray-100 text-gray-500' : 'bg-white focus:ring-2 focus:ring-orange-500 outline-none'}`}
                             value={val}
                             onChange={e => { setVal(e.target.value); if(!e.target.value) setOpen(false); }}
                             placeholder={placeholder}
                             readOnly={readOnly}
                         />
+                        {loading && <Loader2 size={16} className="absolute right-3 top-3 text-orange-500 animate-spin"/>}
                     </div>
                     {open && res.length > 0 && (
                         <div className="absolute z-10 w-full bg-white shadow-xl border mt-1 rounded-lg max-h-48 overflow-y-auto">
@@ -111,7 +123,7 @@
                                     setVal(r.display_name); 
                                     setOpen(false); 
                                     onSelect({ name: r.display_name, lat: parseFloat(r.lat), lng: parseFloat(r.lon) }); 
-                                }} className="p-2 text-xs border-b hover:bg-blue-50 cursor-pointer truncate">
+                                }} className="p-2 text-xs border-b hover:bg-orange-50 cursor-pointer truncate">
                                     {r.display_name}
                                 </div>
                             ))}
@@ -121,19 +133,50 @@
             );
         };
 
+        // --- HELPERS ---
+        const sanitizeId = (text) => text ? text.replace(/[^a-zA-Z0-9]/g, '') : '';
+        const formatWA = (num) => num ? (num.startsWith('0') ? '62' + num.slice(1) : num) : '';
+        const getRoadDistance = async (lat1, lng1, lat2, lng2) => {
+            try {
+                const url = `https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=false`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.code === 'Ok' && data.routes?.[0]) return (data.routes[0].distance / 1000).toFixed(1);
+                return null;
+            } catch { return null; }
+        };
+        const calculateDistanceFallback = (lat1, lon1, lat2, lon2) => {
+            const R = 6371; 
+            const dLat = (lat2 - lat1) * Math.PI/180;
+            const dLon = (lon2 - lon1) * Math.PI/180;
+            const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)*Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return (R * c * 1.4).toFixed(1);
+        };
+        const getCoordinates = async (addr) => {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr + ', Indonesia')}&limit=1`);
+                const data = await res.json();
+                if(data?.[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), name: data[0].display_name };
+                return null;
+            } catch { return null; }
+        };
+
         // --- MAIN APP ---
         function App() {
-            const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('ow_user')) || null);
+            const [user, setUser] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('ow_user')) || null; } catch { return null; }
+            });
             const [screen, setScreen] = useState(user ? 'dashboard' : 'landing');
             const [role, setRole] = useState(null);
             const [orders, setOrders] = useState([]);
             
-            // Form States
-            const [form, setForm] = useState({ name:'', wa:'', pin:'', address:'', plate:'', motor:'', shopName:'' });
+            // Form
+            const [form, setForm] = useState({ name:'', wa:'', pin:'', address:'', plate:'', motor:'', shopName:'', vehicleType:'Motor' });
             const [inputPin, setInputPin] = useState('');
             const [isOnline, setIsOnline] = useState(true);
 
-            // Order States
+            // Order
             const [menu, setMenu] = useState([]);
             const [cart, setCart] = useState({});
             const [merchants, setMerchants] = useState([]);
@@ -143,13 +186,34 @@
             const [price, setPrice] = useState(0);
             const [dist, setDist] = useState(0);
             const [vehicle, setVehicle] = useState('Motor');
+            const [orderDetail, setOrderDetail] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [itemCost, setItemCost] = useState(0);
             
-            // Admin States
+            // Admin
             const [drivers, setDrivers] = useState([]);
             const [finUnlocked, setFinUnlocked] = useState(false);
             const [activeMenu, setActiveMenu] = useState('dashboard');
+            const [mobileMenu, setMobileMenu] = useState(false);
+            const [newItemName, setNewItemName] = useState('');
+            const [newItemPrice, setNewItemPrice] = useState('');
+            
+            // States
+            const [trackId, setTrackId] = useState(null);
+            const [financeTab, setFinanceTab] = useState('driver');
+            const [showForgotPin, setShowForgotPin] = useState(false);
+            const [otp, setOtp] = useState('');
+            const [newPin, setNewPin] = useState('');
+            const [isResetting, setIsResetting] = useState(false);
+            const [financePinInput, setFinancePinInput] = useState('');
+            const [showFinancePinModal, setShowFinancePinModal] = useState(false);
+            const [processingDriverId, setProcessingDriverId] = useState(null);
+            const [markingPaid, setMarkingPaid] = useState(null);
+            const [processingOrder, setProcessingOrder] = useState(null);
+            const [completingOrder, setCompletingOrder] = useState(null);
+            const [currentPage, setCurrentPage] = useState(1);
 
-            // --- EFFECTS ---
+            // Init
             useEffect(() => {
                 signInAnonymously(auth);
                 if(user) {
@@ -161,20 +225,17 @@
                 }
             }, [user]);
 
-            // --- HELPERS ---
             const logout = () => { localStorage.removeItem('ow_user'); setUser(null); setScreen('landing'); };
             const saveUser = (u) => { localStorage.setItem('ow_user', JSON.stringify(u)); setUser(u); setScreen('dashboard'); };
 
-            // --- ACTIONS ---
             const checkWA = async () => {
                 if(!form.wa) return alert("Isi nomor WA");
-                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', form.wa.replace(/[^0-9]/g,''));
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(form.wa));
                 const snap = await getDoc(ref);
                 if(snap.exists()) {
                     const d = snap.data();
                     if(d.role !== role) return alert(`Nomor ini terdaftar sebagai ${d.role}`);
                     if(d.status === 'suspended') return alert("Akun dinonaktifkan Admin.");
-                    // Temporary store user for PIN check
                     setForm({...form, ...d}); 
                     setScreen('pin');
                 } else {
@@ -184,8 +245,8 @@
 
             const register = async () => {
                 if(!form.name || !form.pin) return alert("Lengkapi data");
-                const u = { ...form, role, status: 'active', joined: new Date().toISOString() };
-                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', form.wa.replace(/[^0-9]/g,'')), u);
+                const u = { ...form, role, status: 'active', joined: new Date().toISOString(), isOnline: true };
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(form.wa)), u);
                 saveUser(u);
             };
 
@@ -194,76 +255,267 @@
                 else alert("PIN Salah");
             };
 
+            const handleResetPin = async () => {
+                if(otp !== MASTER_RESET_CODE) return alert("Kode Otorisasi Salah! Minta ke Admin.");
+                if(!newPin || newPin.length < 4) return alert("PIN Baru minimal 4 digit.");
+                setIsResetting(true);
+                try {
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(form.wa));
+                    await updateDoc(ref, { pin: newPin });
+                    alert("Sukses! PIN berhasil diubah. Silakan login dengan PIN baru.");
+                    setForm({...form, pin: newPin}); 
+                    setShowForgotPin(false); setOtp(''); setNewPin(''); setScreen('pin'); 
+                } catch(e) { alert("Gagal reset PIN."); } finally { setIsResetting(false); }
+            };
+
             const calcPrice = async () => {
                 if(!pickup || !dropoff) return;
-                // Simple distance calc
-                const R = 6371; 
-                const dLat = (dropoff.lat - pickup.lat) * Math.PI/180;
-                const dLon = (dropoff.lng - pickup.lng) * Math.PI/180;
-                const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(pickup.lat*Math.PI/180)*Math.cos(dropoff.lat*Math.PI/180) * Math.sin(dLon/2)*Math.sin(dLon/2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                const d = (R * c * 1.4).toFixed(1);
+                setLoading(true);
+                let d = await getRoadDistance(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
+                if(!d) d = calculateDistanceFallback(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
                 setDist(d);
-
                 let base = 6000, perKm = 1600;
                 if(vehicle === 'Mobil') { base = 15000; perKm = 3000; }
                 if(vehicle === 'Pickup') { base = 60000; perKm = 5000; }
-                
-                const cost = d <= 1 ? base : base + ((d-1)*perKm);
+                const cost = parseFloat(d) <= 1 ? base : base + ((parseFloat(d)-1)*perKm);
                 setPrice(Math.ceil(cost/500)*500);
+                setLoading(false);
             };
             
             useEffect(() => { calcPrice() }, [pickup, dropoff, vehicle]);
 
+            // Load Merchants
+            useEffect(() => {
+                if(['food','laundry'].includes(activeMenu) && user) {
+                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where('role', '==', 'merchant'));
+                    getDocs(q).then(s => setMerchants(s.docs.map(d => ({id:d.id, ...d.data()}))));
+                }
+            }, [activeMenu]);
+            
+            // Load Menu Customer
+            useEffect(() => {
+                 if(selMerchant) {
+                     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'products'), where('merchantId', '==', selMerchant));
+                     getDocs(q).then(s => {
+                         setMenu(s.docs.map(d => ({id:d.id, ...d.data()})));
+                         setCart({});
+                     });
+                     const m = merchants.find(x => x.id === selMerchant);
+                     if(m) getCoordinates(m.address || m.shopAddress).then(c => {
+                         if(c) setPickup({name: c.name, lat: c.lat, lng: c.lng});
+                     });
+                 }
+            }, [selMerchant]);
+
+            // Load Menu Merchant
+            useEffect(() => {
+                if(activeMenu === 'manage_menu' && user?.role === 'merchant') {
+                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'products'), where('merchantId', '==', user.wa));
+                    const unsub = onSnapshot(q, (s) => {
+                         setMenu(s.docs.map(d => ({id:d.id, ...d.data()})));
+                    });
+                    return () => unsub();
+                }
+            }, [activeMenu]);
+
+            useEffect(() => {
+                if(Object.keys(cart).length > 0) {
+                    const total = Object.values(cart).reduce((a,b) => a + (b.price * b.qty), 0);
+                    setItemCost(total);
+                } else {
+                    setItemCost(0);
+                }
+            }, [cart]);
+
+            const addMenuItem = async (e) => {
+                e.preventDefault();
+                if(!newItemName || !newItemPrice) return;
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
+                        merchantId: user.wa, 
+                        name: newItemName,
+                        price: parseInt(newItemPrice),
+                        createdAt: new Date().toISOString()
+                    });
+                    setNewItemName(''); setNewItemPrice('');
+                    alert("Menu berhasil ditambahkan!");
+                } catch (err) { console.error(err); }
+            };
+
+            const deleteMenuItem = async (id) => {
+                if(confirm("Hapus menu ini?")) {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
+                }
+            };
+
+            const updateCart = (item, delta) => {
+                setCart(prev => {
+                    const qty = (prev[item.id]?.qty || 0) + delta;
+                    if(qty <= 0) { const n = {...prev}; delete n[item.id]; return n; }
+                    return { ...prev, [item.id]: { ...item, qty } };
+                });
+            };
+
             const createOrder = async () => {
                 if(!price) return alert("Lokasi belum lengkap");
-                const itemTotal = Object.values(cart).reduce((a,b) => a + (b.price * b.qty), 0);
+                let detailStr = orderDetail;
+                let mName = null;
+                if(['food','laundry'].includes(activeMenu)) {
+                   if(Object.keys(cart).length === 0) return alert("Pilih menu dulu");
+                   detailStr = Object.values(cart).map(i => `${i.qty}x ${i.name}`).join(', ');
+                   if(selMerchant) {
+                        const m = merchants.find(x => x.id === selMerchant);
+                        if(m) mName = m.shopName || m.name;
+                   }
+                }
                 const order = {
                     customer: user.name, wa: user.wa,
                     pickup: pickup.name, dropoff: dropoff.name,
                     pickupLat: pickup.lat, pickupLng: pickup.lng,
                     dropoffLat: dropoff.lat, dropoffLng: dropoff.lng,
-                    price, itemCost: itemTotal,
-                    distance: dist, type: activeMenu,
-                    vehicle: vehicle,
-                    items: cart,
-                    merchant: selMerchant,
-                    status: 'pending',
-                    createdAt: new Date().toISOString(),
-                    isPaid: false
+                    price, itemCost, distance: dist, 
+                    type: activeMenu === 'pesan' ? (vehicle === 'Motor' ? 'ride' : vehicle === 'Mobil' ? 'ride_car' : 'ride_pickup') : (activeMenu === 'food' ? 'food' : activeMenu === 'laundry' ? 'laundry' : 'delivery'),
+                    vehicle: vehicle, orderDetail: detailStr, merchantName: mName,
+                    status: 'pending', createdAt: new Date().toISOString(), isPaidOut: false, isMerchantPaid: false
                 };
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), order);
+                const ref = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), order);
                 alert("Order Terkirim!");
                 setCart({}); setPrice(0); setPickup(null); setDropoff(null);
-                setActiveMenu('dashboard');
+                setTrackId(ref.id); setActiveMenu('tracking');
+            };
+
+            const updateOrder = async (oid, data) => {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', oid), data);
+            };
+
+            const cancelOrder = async (orderId) => {
+                setProcessingOrder(orderId);
+                try {
+                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId);
+                    await updateDoc(orderRef, { status: 'cancelled' });
+                    alert("Pesanan berhasil dibatalkan.");
+                    if (activeMenu === 'tracking') { setActiveMenu('dashboard'); setTrackId(null); }
+                } catch (err) { alert("Gagal batal."); } finally { setProcessingOrder(null); }
+            };
+
+            const acceptOrder = async (orderId) => {
+                setProcessingOrder(orderId);
+                try {
+                    const dName = user.name || 'Driver';
+                    const dWA = user.wa || '-';
+                    const dPlate = user.plate || '-';
+                    const dMotor = user.motor || '-';
+                    const dVehicle = user.vehicleType || 'Motor';
+                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId);
+                    await updateDoc(orderRef, {
+                        status: 'accepted', driverName: dName, driverWA: dWA, driverPlate: dPlate, driverMotor: dMotor, driverVehicle: dVehicle, takenAt: new Date().toISOString()
+                    });
+                    alert("Order diambil!");
+                    if(user.role === 'driver') setActiveMenu('dashboard'); 
+                } catch (err) { alert("Gagal ambil."); } finally { setProcessingOrder(null); }
+            };
+
+            const completeOrder = async (orderId) => {
+                setCompletingOrder(orderId);
+                try {
+                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId);
+                    await updateDoc(orderRef, { status: 'completed', completedAt: new Date().toISOString() });
+                    alert("Selesai!");
+                } catch (err) { alert("Gagal selesai."); } finally { setCompletingOrder(null); }
+            };
+            
+            const toggleDriverStatus = async (driverId, currentStatus) => {
+                setProcessingDriverId(driverId); 
+                const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
+                try {
+                    const driverRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', driverId);
+                    await updateDoc(driverRef, { status: newStatus });
+                    setDrivers(prev => prev.map(d => d.id === driverId ? { ...d, status: newStatus } : d));
+                } catch (err) { alert("Gagal ubah status."); } finally { setProcessingDriverId(null); }
+            };
+
+            const markAsPaid = async (rowKey, orderIds, type) => {
+                setMarkingPaid(rowKey);
+                try {
+                    const batch = writeBatch(db);
+                    const field = type === 'driver' ? 'isPaidOut' : 'isMerchantPaid';
+                    orderIds.forEach(id => {
+                        const ref = doc(db, 'artifacts', appId, 'public', 'data', 'orders', id);
+                        batch.update(ref, { [field]: true });
+                    });
+                    await batch.commit();
+                } catch (e) { alert("Gagal update"); } finally { setMarkingPaid(null); }
+            };
+
+            const getMyOrders = () => {
+                if(!user) return [];
+                if(user.role === 'user') return orders;
+                return orders.filter(o => {
+                    if(user.role === 'driver') return o.driverWA === user.wa;
+                    if(user.role === 'merchant') return o.merchantName === (user.shopName || user.name);
+                    return o.wa === user.wa;
+                });
+            };
+
+            const getMenuItems = () => { 
+                const r = user?.role; 
+                if(r==='user') return [{id:'dashboard',label:'Beranda',icon:Home},{id:'all_transactions',label:'Semua Riwayat',icon:FileText},{id:'drivers',label:'Kelola Driver',icon:UserCog},{id:'finance',label:'Laporan Keuangan',icon:Banknote},{id:'pesan',label:'Tes Order',icon:PlusCircle},{id:'order_in',label:'Monitor',icon:Navigation}];
+                if(r==='driver') return [{id:'dashboard',label:'Beranda',icon:Home},{id:'order_in',label:'Orderan Masuk',icon:Navigation},{id:'history',label:'Riwayat',icon:History}];
+                if(r==='merchant') return [{id:'dashboard',label:'Beranda',icon:Home},{id:'manage_menu',label:'Kelola Menu',icon:ListPlus},{id:'history',label:'Riwayat',icon:History}];
+                return [{id:'dashboard',label:'Beranda',icon:Home},{id:'pesan',label:'Pesan Ojek',icon:PlusCircle},{id:'food',label:'Pesan Makanan',icon:Utensils},{id:'laundry',label:'Pesan Laundry',icon:Shirt},{id:'paket',label:'Kirim Paket',icon:Package},{id:'history',label:'Riwayat',icon:History}];
+            };
+            
+            const verifyFinancePin = (e) => {
+              e.preventDefault();
+              if (financePinInput === OWNER_SECRET_PIN) { setFinUnlocked(true); setShowFinancePinModal(false); setFinancePinInput(''); setActiveMenu('finance'); } 
+              else { alert("PIN Owner Salah!"); }
+            };
+
+            const handleFinanceMenuClick = () => {
+                if (finUnlocked) setActiveMenu('finance');
+                else { setShowFinancePinModal(true); setMobileMenu(false); }
+            };
+
+            const downloadReport = (list, type) => {
+                const headers = ["Tanggal", type === 'driver' ? "Nama Driver" : "Nama Merchant", "Total Order", "Total", "Potongan", "Bersih", "Status"];
+                const rows = list.map(i => [i.date, i.name, i.totalOrders, i.gross, i.gross*ADMIN_FEE, i.gross-(i.gross*ADMIN_FEE), i.allPaid?"Lunas":"Belum"].join(","));
+                const csv = [headers.join(","), ...rows].join("\n");
+                const blob = new Blob([csv], {type:'text/csv'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'laporan.csv'; a.click();
             };
 
             // --- RENDER SCREENS ---
             if(screen === 'landing') return (
-                <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                    <h1 className="text-4xl font-bold mb-2">OjekWarga</h1>
-                    <p className="mb-8 opacity-90">Satu Aplikasi untuk Semua Kebutuhan</p>
-                    <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                        {['driver','customer','merchant','user'].map(r => (
-                            <button key={r} onClick={() => {
-                                setRole(r);
-                                if(r === 'user') { setForm({pin: ADMIN_SECRET_PIN}); setScreen('pin_admin'); }
-                                else setScreen('check');
-                            }} className="bg-white text-gray-800 p-4 rounded-xl font-bold capitalize hover:bg-gray-100 shadow-lg">
-                                {r === 'user' ? 'Admin' : r}
-                            </button>
-                        ))}
+                <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-orange-400 via-red-500 to-pink-500 font-sans">
+                    <div className="max-w-4xl w-full text-center">
+                        <h1 className="text-6xl font-extrabold text-white drop-shadow-lg mb-4">Ojek<span className="text-yellow-500 bg-white px-2 rounded-lg ml-1">Warga</span></h1>
+                        <p className="text-white text-xl font-medium drop-shadow-md mb-12 opacity-90">Siap Antar, Siap Jaga Warga</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                            {[
+                              { id: 'driver', label: 'Driver', icon: Bike, color: 'text-green-600' },
+                              { id: 'customer', label: 'Penumpang', icon: User, color: 'text-blue-600' },
+                              { id: 'merchant', label: 'Merchant', icon: Store, color: 'text-orange-600' },
+                              { id: 'user', label: 'Admin', icon: LayoutDashboard, color: 'text-purple-600' }
+                            ].map(role => (
+                              <button key={role.id} type="button" onClick={() => { setRole(role.id); setScreen(role.id==='user'?'pin_admin':'check'); setForm({wa:'',pin:''}); }} 
+                                className="group bg-white hover:bg-gray-50 p-8 rounded-3xl shadow-2xl transition-all transform hover:-translate-y-2 active:scale-95 border-b-8 border-gray-200 active:border-b-0">
+                                <div className="bg-gray-50 p-6 rounded-full mb-6 mx-auto w-fit shadow-inner"><role.icon size={48} className={role.color}/></div>
+                                <h2 className="text-xl font-bold text-gray-800">{role.label}</h2>
+                              </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             );
 
             if(screen === 'check') return (
-                <div className="min-h-screen flex items-center justify-center p-6">
+                <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
                     <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
                         <h2 className="text-xl font-bold mb-4">Login {role}</h2>
-                        <input className="w-full border p-3 rounded-lg mb-4" placeholder="Nomor WhatsApp" onChange={e => setForm({...form, wa: e.target.value})}/>
-                        <button onClick={checkWA} className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">Lanjut</button>
-                        <button onClick={() => setScreen('landing')} className="w-full mt-2 text-gray-500">Batal</button>
+                        <input className="w-full border p-3 rounded-lg mb-4" placeholder="Nomor WhatsApp" value={form.wa} onChange={e=>setForm({...form, wa:e.target.value})}/>
+                        <button type="button" onClick={checkWA} className="w-full bg-orange-500 text-white p-3 rounded-lg font-bold hover:bg-orange-600">Lanjut</button>
+                        <button type="button" onClick={()=>setScreen('landing')} className="w-full mt-3 text-gray-400 text-sm">Batal</button>
                     </div>
                 </div>
             );
@@ -272,13 +524,35 @@
                 <div className="min-h-screen flex items-center justify-center p-6">
                     <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center">
                         <h2 className="text-xl font-bold mb-4">Masukkan PIN</h2>
-                        <input type="password" className="w-full border p-3 rounded-lg mb-4 text-center text-2xl tracking-widest" maxLength={6} onChange={e => setInputPin(e.target.value)} />
-                        <button onClick={() => {
+                        <input type="password" className="w-full border p-3 rounded-lg mb-4 text-center text-2xl tracking-widest" maxLength={6} onChange={e=>setInputPin(e.target.value)} autoFocus />
+                        <button type="button" onClick={() => {
                             if(screen === 'pin_admin') {
-                                if(inputPin === '888888') saveUser({name:'Super Admin', role:'user'});
-                                else alert("PIN Salah");
+                                if(inputPin === '888888') {
+                                    const admin = { name: 'Super Admin', role: 'user', wa: '000' };
+                                    localStorage.setItem('ojekWargaUser', JSON.stringify(admin));
+                                    setUser(admin); setScreen('dashboard');
+                                } else alert("PIN Salah");
                             } else login();
-                        }} className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">Masuk</button>
+                        }} className="w-full bg-orange-500 text-white p-3 rounded-lg font-bold hover:bg-orange-600">Masuk</button>
+                        {screen === 'pin' && <button type="button" onClick={()=>setShowForgotPin(true)} className="block w-full text-center text-sm text-blue-500 mt-4 font-bold">Lupa PIN?</button>}
+                    </div>
+                </div>
+            );
+
+            if(showForgotPin) return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md">
+                        <div className="text-center mb-6">
+                            <h2 className="text-xl font-bold">Lupa PIN?</h2>
+                            <p className="text-gray-500 text-xs mt-2">Hubungi Admin untuk Kode Otorisasi.</p>
+                            <a href={`https://wa.me/${formatWA(ADMIN_WA_NUMBER)}?text=Halo+Admin,+saya+lupa+PIN+akun+OjekWarga+saya+(No:+${form.wa}).+Mohon+bantuan+reset.`} target="_blank" className="flex items-center justify-center w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg mt-3 text-sm"><MessageCircle size={16} className="mr-2"/> Chat Admin Sekarang</a>
+                        </div>
+                        <div className="space-y-3">
+                            <input className="w-full p-3 border rounded-xl text-center font-bold" placeholder="Kode Otorisasi" value={otp} onChange={e=>setOtp(e.target.value)}/>
+                            <input className="w-full p-3 border rounded-xl text-center font-bold" placeholder="PIN Baru" maxLength={6} value={newPin} onChange={e=>setNewPin(e.target.value)}/>
+                            <button type="button" onClick={handleResetPin} className="w-full bg-red-500 text-white p-3 rounded-xl font-bold">{isResetting ? 'Memproses...' : 'Ganti PIN'}</button>
+                            <button type="button" onClick={()=>{setShowForgotPin(false); setOtp(''); setNewPin('');}} className="w-full text-gray-400 text-sm mt-2">Batal</button>
+                        </div>
                     </div>
                 </div>
             );
@@ -289,207 +563,248 @@
                         <h2 className="text-xl font-bold mb-4">Daftar Baru</h2>
                         <div className="space-y-3">
                             <input className="w-full border p-2 rounded" placeholder="Nama Lengkap" onChange={e => setForm({...form, name: e.target.value})}/>
-                            <input className="w-full border p-2 rounded" placeholder="Alamat" onChange={e => setForm({...form, address: e.target.value})}/>
+                            <input className="w-full border p-2 rounded" placeholder="Alamat Lengkap" onChange={e => setForm({...form, address: e.target.value})}/>
                             <input className="w-full border p-2 rounded" type="password" placeholder="Buat PIN (6 Angka)" onChange={e => setForm({...form, pin: e.target.value})}/>
                             {role === 'merchant' && <input className="w-full border p-2 rounded" placeholder="Nama Toko" onChange={e => setForm({...form, shopName: e.target.value})}/>}
                             {role === 'driver' && (
-                                <>
-                                    <select className="w-full border p-2 rounded" onChange={e => setForm({...form, vehicleType: e.target.value})}>
-                                        <option value="Motor">Motor</option><option value="Mobil">Mobil</option><option value="Pickup">Pickup</option>
-                                    </select>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select className="w-full border p-2 rounded" onChange={e => setForm({...form, vehicleType: e.target.value})}><option>Motor</option><option>Mobil</option><option>Pickup</option></select>
                                     <input className="w-full border p-2 rounded" placeholder="Plat Nomor" onChange={e => setForm({...form, plate: e.target.value})}/>
-                                </>
+                                </div>
                             )}
                         </div>
-                        <button onClick={register} className="w-full bg-green-600 text-white p-3 rounded-lg font-bold mt-4">Daftar</button>
+                        <button type="button" onClick={register} className="w-full bg-green-600 text-white p-3 rounded-lg font-bold mt-4">Daftar</button>
                     </div>
                 </div>
             );
 
             // --- DASHBOARD LAYOUT ---
             return (
-                <div className="flex h-screen">
-                    {/* SIDEBAR */}
-                    <div className="w-64 bg-white border-r hidden md:flex flex-col p-4">
-                        <h1 className="font-bold text-2xl text-blue-600 mb-8 flex items-center"><Bike className="mr-2"/> OjekWarga</h1>
-                        <div className="flex-1 space-y-2">
-                            <button onClick={() => setActiveMenu('dashboard')} className={`w-full text-left p-3 rounded-lg font-medium flex items-center ${activeMenu==='dashboard'?'bg-blue-50 text-blue-600':''}`}><Home size={18} className="mr-3"/> Beranda</button>
-                            
-                            {/* MENU BERDASARKAN ROLE */}
-                            {user.role === 'customer' && (
-                                <>
-                                    <button onClick={() => {setActiveMenu('pesan'); setVehicle('Motor');}} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 flex items-center"><Bike size={18} className="mr-3"/> Pesan Ojek</button>
-                                    <button onClick={() => {setActiveMenu('food');}} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 flex items-center"><Utensils size={18} className="mr-3"/> Makanan</button>
-                                    <button onClick={() => {setActiveMenu('laundry');}} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 flex items-center"><Shirt size={18} className="mr-3"/> Laundry</button>
-                                </>
-                            )}
-                            
-                            {user.role === 'merchant' && (
-                                <button onClick={() => setActiveMenu('menu_manage')} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 flex items-center"><ListPlus size={18} className="mr-3"/> Kelola Menu</button>
-                            )}
-
-                            {user.role === 'user' && (
-                                <>
-                                    <button onClick={() => setActiveMenu('finance')} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 flex items-center"><Banknote size={18} className="mr-3"/> Keuangan</button>
-                                    <button onClick={() => setActiveMenu('drivers')} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 flex items-center"><UserCog size={18} className="mr-3"/> Kelola Driver</button>
-                                </>
-                            )}
-
-                            <button onClick={() => setActiveMenu('history')} className="w-full text-left p-3 rounded-lg hover:bg-gray-50 flex items-center"><History size={18} className="mr-3"/> Riwayat</button>
-                        </div>
+                <div className="flex h-screen bg-gray-50 font-sans">
+                    <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r transform transition-transform ${mobileMenu ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 flex flex-col`}>
+                        <div className="p-6 font-extrabold text-2xl text-orange-600 flex items-center"><Bike className="text-yellow-500 mr-2"/> OjekWarga</div>
+                        <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+                            {getMenuItems().map(item => (
+                                <button key={item.id} onClick={() => { if (item.id === 'financials') handleFinanceMenuClick(); else setActiveMenu(item.id); }} className={`w-full text-left p-3 rounded-lg flex items-center ${activeMenu===item.id?'bg-blue-50 text-blue-600':''}`}><item.icon size={18} className="mr-3"/> {item.label}</button>
+                            ))}
+                        </nav>
                         <button onClick={logout} className="p-3 text-red-500 flex items-center"><LogOut size={18} className="mr-3"/> Keluar</button>
-                    </div>
+                    </aside>
 
-                    {/* MAIN CONTENT */}
                     <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                        {/* --- DASHBOARD --- */}
+                        <header className="md:hidden mb-4 flex justify-between"><div className="font-bold text-orange-600">OjekWarga</div><button onClick={()=>setMobileMenu(!mobileMenu)}><Menu/></button></header>
+                        
                         {activeMenu === 'dashboard' && (
                             <div className="max-w-2xl mx-auto">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-2xl font-bold">Halo, {user.name}</h2>
-                                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase">{user.role}</span>
-                                </div>
-
-                                {/* Info Call Center */}
-                                <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-2xl shadow-lg mb-6">
-                                    <h3 className="font-bold text-lg mb-2 flex items-center"><Headphones className="mr-2"/> Butuh Bantuan?</h3>
+                                <h2 className="text-2xl font-bold mb-6">Halo, {user.name}</h2>
+                                <div className="bg-gradient-to-r from-orange-500 to-pink-500 p-6 rounded-2xl shadow-lg mb-6 text-white">
+                                    <h3 className="font-bold text-lg mb-2 flex items-center"><Headphones className="mr-2"/> Pusat Bantuan</h3>
                                     <div className="flex gap-3 mt-3">
-                                        <a href="https://wa.me/6281311314203" target="_blank" className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center"><MessageCircle size={16} className="mr-2"/> Admin 1</a>
-                                        <a href="https://wa.me/6281299988548" target="_blank" className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center"><MessageCircle size={16} className="mr-2"/> Admin 2</a>
+                                        <a href={`https://wa.me/${formatWA(ADMIN_WA_NUMBER)}`} target="_blank" className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center hover:bg-gray-100"><MessageCircle size={16} className="mr-2"/> Admin 1</a>
+                                         <a href="https://wa.me/6281299988548" target="_blank" className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center hover:bg-gray-100"><MessageCircle size={16} className="mr-2"/> Admin 2</a>
                                     </div>
                                 </div>
-
-                                {/* Orderan Aktif (Semua User) */}
-                                <h3 className="font-bold text-lg mb-3">Status Pesanan</h3>
-                                {orders.filter(o => (o.customer === user.name || o.driverName === user.name) && o.status !== 'completed' && o.status !== 'cancelled').length === 0 ? (
-                                    <div className="p-8 text-center text-gray-400 border border-dashed rounded-xl">Tidak ada pesanan aktif.</div>
-                                ) : (
-                                    orders.filter(o => (o.customer === user.name || o.driverName === user.name) && o.status !== 'completed' && o.status !== 'cancelled').map(order => (
-                                        <Card key={order.id} className="mb-3 border-l-4 border-blue-500">
-                                            <div className="flex justify-between">
-                                                <div>
-                                                    <Badge status={order.status}/>
-                                                    <div className="font-bold mt-1">{order.pickup} -> {order.dropoff}</div>
-                                                    <div className="text-sm text-gray-500">Rp {order.price.toLocaleString()}</div>
-                                                </div>
-                                                {/* Action Buttons */}
-                                                <div className="flex flex-col gap-2">
-                                                    {user.role === 'driver' && order.status === 'pending' && (
-                                                        <button onClick={async () => {
-                                                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), {
-                                                                status: 'accepted', driverName: user.name, driverWA: user.wa
-                                                            });
-                                                        }} className="bg-yellow-400 px-4 py-2 rounded font-bold text-sm">Ambil</button>
-                                                    )}
-                                                    {user.role === 'driver' && order.status === 'accepted' && (
-                                                        <button onClick={async () => {
-                                                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), {
-                                                                status: 'completed', completedAt: new Date().toISOString()
-                                                            });
-                                                        }} className="bg-blue-600 text-white px-4 py-2 rounded font-bold text-sm">Selesai</button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </Card>
-                                    ))
+                                {user.role === 'driver' && (
+                                    <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm mb-4">
+                                        <span className="font-bold text-gray-700">Status Driver</span>
+                                        <button onClick={async () => {
+                                            const s = !user.isOnline;
+                                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(user.wa)), {isOnline: s});
+                                            const u = {...user, isOnline: s}; setUser(u); localStorage.setItem('ow_user', JSON.stringify(u));
+                                        }} className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center ${user.isOnline ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                                            {user.isOnline ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
                                 )}
+                                {getMyOrders().filter(o => (o.status === 'pending' || o.status === 'accepted')).map(order => (
+                                    <Card key={order.id} className="mb-3 border-l-4 border-blue-500">
+                                        <div className="flex justify-between">
+                                            <div>
+                                                <Badge status={order.status} type={order.type}/>
+                                                <div className="font-bold mt-1">{order.pickup} &rarr; {order.dropoff}</div>
+                                                <div className="text-sm text-gray-500">Rp {order.price.toLocaleString()}</div>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                {user.role === 'driver' && order.status === 'pending' && (
+                                                    <button type="button" onClick={() => acceptOrder(order.id)} disabled={processingOrder===order.id} className="bg-yellow-400 px-4 py-2 rounded font-bold text-sm">{processingOrder===order.id ? '...' : 'Ambil'}</button>
+                                                )}
+                                                {user.role === 'driver' && order.status === 'accepted' && (
+                                                    <button type="button" onClick={() => completeOrder(order.id)} disabled={completingOrder===order.id} className="bg-blue-600 text-white px-4 py-2 rounded font-bold text-sm">{completingOrder===order.id ? '...' : 'Selesai'}</button>
+                                                )}
+                                                {user.role === 'customer' && order.status === 'pending' && (
+                                                    <button type="button" onClick={() => cancelOrder(order.id)} disabled={processingOrder===order.id} className="bg-red-100 text-red-600 px-4 py-2 rounded font-bold text-sm hover:bg-red-200">Batalkan</button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))}
                             </div>
                         )}
 
-                        {/* --- FORM ORDER (OJEK/FOOD/LAUNDRY) --- */}
-                        {['pesan', 'food', 'laundry'].includes(activeMenu) && (
+                        {/* ... ORDER FORMS ... */}
+                        {['pesan', 'food', 'laundry', 'paket'].includes(activeMenu) && (
                             <div className="max-w-xl mx-auto">
                                 <h2 className="text-2xl font-bold mb-4 capitalize">Pesan {activeMenu === 'pesan' ? 'Ojek' : activeMenu}</h2>
                                 <Card>
                                     {activeMenu === 'pesan' && (
                                         <div className="grid grid-cols-3 gap-2 mb-4">
                                             {['Motor', 'Mobil', 'Pickup'].map(v => (
-                                                <button key={v} onClick={() => setVehicle(v)} className={`p-2 text-xs font-bold rounded border ${vehicle===v ? 'bg-blue-600 text-white' : 'bg-white'}`}>{v}</button>
+                                                <button key={v} onClick={() => setVehicle(v)} className={`py-2 text-xs font-bold rounded-lg border ${vehicle===v ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600'}`}>{v}</button>
                                             ))}
                                         </div>
                                     )}
-
-                                    {/* Logic Merchant Selection for Food/Laundry */}
-                                    {(activeMenu === 'food' || activeMenu === 'laundry') && (
+                                    {['food', 'laundry'].includes(activeMenu) && (
                                         <div className="mb-4">
-                                            <button onClick={async () => {
+                                            <label className="block text-xs font-bold mb-1">Pilih Mitra</label>
+                                            <select onChange={(e) => {
+                                                setSelMerchant(e.target.value);
+                                                loadMenu(e.target.value);
+                                                const m = merchants.find(x=>x.id===e.target.value);
+                                                if(m) getCoordinates(m.address).then(c => { if(c) setPickup({name:c.name, lat:c.lat, lng:c.lng}) });
+                                            }} className="w-full p-2 border rounded bg-white" onFocus={async () => {
                                                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where('role', '==', 'merchant'));
                                                 const s = await getDocs(q);
                                                 setMerchants(s.docs.map(d => ({id:d.id, ...d.data()})));
-                                            }} className="text-blue-600 text-xs font-bold mb-2">Refresh Toko</button>
-                                            <select onChange={async (e) => {
-                                                const mid = e.target.value;
-                                                setSelMerchant(mid);
-                                                if(mid) {
-                                                    const m = merchants.find(x => x.id === mid);
-                                                    // Auto fill location from merchant address
-                                                    const coords = await getCoordinates(m.address || m.shopAddress);
-                                                    if(coords) setPickup({name: m.shopName || m.address, lat: coords.lat, lng: coords.lng});
-                                                    
-                                                    // Load menu
-                                                    const qMenu = query(collection(db, 'artifacts', appId, 'public', 'data', 'products'), where('merchantId', '==', mid));
-                                                    const sMenu = await getDocs(qMenu);
-                                                    setMenu(sMenu.docs.map(d => ({id:d.id, ...d.data()})));
-                                                }
-                                            }} className="w-full p-2 border rounded mb-2">
-                                                <option value="">Pilih Mitra...</option>
+                                            }}>
+                                                <option value="">-- Pilih --</option>
                                                 {merchants.map(m => <option key={m.id} value={m.id}>{m.shopName || m.name}</option>)}
                                             </select>
-
-                                            {/* Menu List */}
-                                            {menu.map(item => (
-                                                <div key={item.id} className="flex justify-between items-center border-b py-2">
-                                                    <div><div className="font-bold text-sm">{item.name}</div><div className="text-xs text-gray-500">Rp {item.price}</div></div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button onClick={() => setCart({...cart, [item.id]:{...item, qty: (cart[item.id]?.qty||0)-1}})} className="px-2 bg-gray-200 rounded">-</button>
-                                                        <span className="text-sm font-bold">{cart[item.id]?.qty || 0}</span>
-                                                        <button onClick={() => setCart({...cart, [item.id]:{...item, qty: (cart[item.id]?.qty||0)+1}})} className="px-2 bg-gray-200 rounded">+</button>
-                                                    </div>
+                                            {selMerchant && menu.length > 0 && (
+                                                <div className="mt-4 border rounded p-2">
+                                                    {menu.map(item => (
+                                                        <div key={item.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                                                            <div><div className="font-bold text-sm">{item.name}</div><div className="text-xs text-gray-500">Rp {item.price.toLocaleString()}</div></div>
+                                                            <div className="flex items-center gap-2">
+                                                                <button onClick={() => updateCart(item, -1)} className="px-2 bg-gray-200 rounded">-</button>
+                                                                <span className="text-sm font-bold">{cart[item.id]?.qty || 0}</span>
+                                                                <button onClick={() => updateCart(item, 1)} className="px-2 bg-gray-200 rounded">+</button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    <div className="mt-2 pt-2 border-t text-right font-bold text-orange-600">Total: Rp {itemCost.toLocaleString()}</div>
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
                                     )}
-
-                                    <LocationInput label="Lokasi Jemput" placeholder="Cari lokasi..." onSelect={setPickup} initialValue={pickup?.name} readOnly={!!selMerchant} />
+                                    <LocationInput label="Lokasi Jemput" placeholder="Cari lokasi..." onSelect={setPickup} initialValue={pickup?.name} readOnly={false} />
                                     <LocationInput label="Lokasi Tujuan" placeholder="Cari lokasi..." onSelect={setDropoff} />
-                                    
+                                    {activeMenu === 'paket' && <div className="mb-3"><label className="text-xs font-bold">Penerima</label><input className="w-full p-2 border rounded" onChange={e=>setOrderDetail(e.target.value)}/></div>}
                                     <div className="bg-gray-50 p-4 rounded mt-4 mb-4 text-sm">
-                                        <div className="flex justify-between"><span>Jarak:</span> <b>{dist} KM</b></div>
                                         <div className="flex justify-between text-blue-600"><span>Ongkir:</span> <b>Rp {price.toLocaleString()}</b></div>
-                                        {Object.keys(cart).length > 0 && (
-                                            <div className="flex justify-between text-orange-600 border-t pt-2 mt-2">
-                                                <span>Total Belanja:</span> 
-                                                <b>Rp {Object.values(cart).reduce((a,b)=>a+(b.price*b.qty),0).toLocaleString()}</b>
-                                            </div>
-                                        )}
+                                        {itemCost > 0 && <div className="flex justify-between text-green-600 pt-2 border-t mt-2"><span>Total Bayar:</span> <b>Rp {(price + itemCost).toLocaleString()}</b></div>}
+                                        {loading && <div className="text-center text-xs text-blue-500 mt-2">Menghitung...</div>}
                                     </div>
-
-                                    <button onClick={createOrder} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700">
-                                        Cari Driver
-                                    </button>
+                                    <button onClick={createOrder} disabled={!price || loading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-orange-600 disabled:opacity-50">{loading ? 'Memproses...' : 'Pesan Sekarang'}</button>
                                 </Card>
                             </div>
                         )}
-
-                        {/* --- RIWAYAT --- */}
-                        {activeMenu === 'history' && (
+                        
+                        {activeMenu === 'order_in' && (
                             <div className="max-w-4xl mx-auto">
-                                <h2 className="text-2xl font-bold mb-4">Riwayat</h2>
-                                <div className="space-y-2">
-                                    {orders.filter(o => o.customer === user.name || o.driverName === user.name || user.role === 'user').map(order => (
-                                        <div key={order.id} className="bg-white p-4 rounded shadow-sm flex justify-between">
-                                            <div>
-                                                <div className="font-bold">{order.type} - {order.date}</div>
-                                                <div className="text-sm text-gray-500">{order.pickup} -> {order.dropoff}</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <Badge status={order.status}/>
-                                                <div className="font-bold mt-1">Rp {order.price.toLocaleString()}</div>
-                                            </div>
+                                <h2 className="text-2xl font-bold mb-4">Order Masuk</h2>
+                                {orders.filter(o => o.status === 'pending').map(order => (
+                                    <Card key={order.id} className="mb-4 border-l-4 border-yellow-400">
+                                        <div className="flex justify-between mb-2"><div className="font-bold">{order.customer}</div><div className="text-green-600 font-bold">Rp {order.price.toLocaleString()}</div></div>
+                                        <div className="text-sm text-gray-600 mb-4"><div>Jemput: {order.pickup}</div><div>Tujuan: {order.dropoff}</div></div>
+                                        <button onClick={() => acceptOrder(order.id)} disabled={processingOrder === order.id} className="w-full mt-4 bg-yellow-400 font-bold py-3 rounded-xl">{processingOrder === order.id ? 'Proses...' : 'Ambil Order'}</button>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* --- ADMIN SECTIONS --- */}
+                        {activeMenu === 'drivers' && (
+                             <div className="max-w-4xl mx-auto">
+                                <h2 className="text-2xl font-bold mb-4">Kelola Driver</h2>
+                                <button onClick={async()=>{const q=query(collection(db,'artifacts',appId,'public','data','users'),where('role','==','driver'));const s=await getDocs(q);setDrivers(s.docs.map(d=>({id:d.id,...d.data()})))}} className="mb-4 text-blue-600 text-sm font-bold">Refresh Data</button>
+                                <div className="grid gap-3">
+                                    {drivers.map(d => (
+                                        <div key={d.id} className="bg-white p-4 rounded shadow mb-2 flex justify-between items-center">
+                                            <div><div className="font-bold">{d.name} {d.status==='suspended' && <span className="text-red-500 text-xs ml-2">(SUSPENDED)</span>}</div><div className="text-sm text-gray-500">{d.wa} • {d.plate}</div></div>
+                                            <button onClick={() => toggleDriverStatus(d.id, d.status)} disabled={processingDriverId === d.id} className={`px-3 py-1 rounded text-xs font-bold text-white ${d.status==='suspended'?'bg-green-500':'bg-red-500'}`}>{processingDriverId === d.id ? '...' : (d.status==='suspended'?'Aktifkan':'Suspend')}</button>
                                         </div>
                                     ))}
                                 </div>
                             </div>
+                        )}
+                        
+                        {/* Finance Modal */}
+                         {showFinancePinModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                                <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
+                                    <h3 className="text-xl font-bold mb-2">Akses Terbatas</h3>
+                                    <p className="text-gray-500 text-sm mb-6">PIN Owner:</p>
+                                    <form onSubmit={verifyFinancePin}>
+                                        <input type="password" className="w-full p-3 border rounded-xl text-center text-xl tracking-widest font-bold mb-4" maxLength={6} value={financePinInput} onChange={e => setFinancePinInput(e.target.value)} autoFocus/>
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={() => setShowFinancePinModal(false)} className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl">Batal</button>
+                                            <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700">Buka</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeMenu === 'finance' && (
+                             <div className="max-w-5xl mx-auto">
+                                <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">Laporan Keuangan</h2><div className="flex gap-2"><button onClick={()=>setFinanceTab('driver')} className={`px-3 py-1 rounded ${financeTab==='driver'?'bg-blue-600 text-white':'bg-white'}`}>Driver</button><button onClick={()=>setFinanceTab('merchant')} className={`px-3 py-1 rounded ${financeTab==='merchant'?'bg-blue-600 text-white':'bg-white'}`}>Merchant</button><button onClick={() => downloadReport(financialList, financeTab)} className="bg-green-600 text-white px-3 py-1 rounded font-bold text-sm">Excel</button></div></div>
+                                <div className="bg-white rounded-xl shadow overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-100 border-b"><tr><th className="p-3">Tanggal</th><th className="p-3">Nama</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Potongan</th><th className="p-3 text-right text-green-600">Bersih</th><th className="p-3 text-center">Status</th></tr></thead>
+                                        <tbody>
+                                            {Object.values(orders.filter(o => o.status === 'completed').reduce((acc, o) => {
+                                                 const name = financeTab==='driver' ? o.driverName : o.merchantName;
+                                                 if((financeTab==='driver' && !name) || (financeTab==='merchant' && !name)) return acc;
+                                                 const k = `${name}-${o.createdAt.split('T')[0]}`;
+                                                 if(!acc[k]) acc[k] = { date: o.createdAt.split('T')[0], name, total: 0, gross: 0, ids: [], paid: true };
+                                                 acc[k].total++;
+                                                 acc[k].gross += (financeTab==='driver'?o.price:o.itemCost);
+                                                 acc[k].ids.push(o.id);
+                                                 if(financeTab==='driver'?!o.isPaidOut:!o.isMerchantPaid) acc[k].paid = false;
+                                                 return acc;
+                                            }, {})).map((i, idx) => (
+                                                <tr key={idx} className="border-b hover:bg-gray-50">
+                                                    <td className="p-3">{i.date}</td><td className="p-3 font-bold">{i.name}</td><td className="p-3 text-right">{i.gross.toLocaleString()}</td><td className="p-3 text-right text-red-500">{(i.gross*ADMIN_FEE).toLocaleString()}</td><td className="p-3 text-right font-bold text-green-600">{(i.gross*(1-ADMIN_FEE)).toLocaleString()}</td>
+                                                    <td className="p-3 text-center">{i.paid ? <span className="text-green-600 font-bold">Lunas</span> : <button onClick={() => markAsPaid(idx, i.ids, financeTab)} disabled={markingPaid === idx} className="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-bold">{markingPaid === idx ? '...' : 'Bayar'}</button>}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- TRACKING VIEW --- */}
+                        {activeMenu === 'tracking' && (
+                             <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden mt-4">
+                                {(() => {
+                                    const tOrder = orders.find(o => o.id === trackId);
+                                    if(!tOrder) return <div className="p-8 text-center">Order selesai atau batal. <button onClick={()=>setActiveMenu('dashboard')} className="text-blue-500 font-bold block mt-4">Kembali</button></div>;
+                                    return (
+                                        <>
+                                            <div className={`p-8 text-center text-white ${tOrder.status==='pending'?'bg-yellow-400':tOrder.status==='accepted'?'bg-blue-500':'bg-green-500'}`}>
+                                                <h2 className="text-2xl font-bold capitalize">{tOrder.status === 'pending' ? 'Mencari Driver...' : tOrder.status}</h2>
+                                            </div>
+                                            <div className="p-6">
+                                                <div className="space-y-4">
+                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Jemput</p><p className="font-bold">{tOrder.pickup}</p></div>
+                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Tujuan</p><p className="font-bold">{tOrder.dropoff}</p></div>
+                                                </div>
+                                                {tOrder.status === 'pending' && <button type="button" onClick={() => cancelOrder(tOrder.id)} disabled={processingOrder === tOrder.id} className="w-full mt-6 bg-red-100 text-red-600 py-3 rounded-xl font-bold">{processingOrder === tOrder.id ? '...' : 'Batalkan'}</button>}
+                                                {tOrder.status === 'completed' && <button onClick={() => setActiveMenu('dashboard')} className="w-full mt-6 bg-gray-900 text-white py-3 rounded-xl font-bold">Kembali</button>}
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                             </div>
+                        )}
+                        
+                        {/* ... OTHER MENUS (History, Profile) ... */}
+                        {activeMenu === 'history' && (
+                            <div className="max-w-4xl mx-auto"><h2 className="text-2xl font-bold mb-4">Riwayat</h2>{getMyOrders().map(order => (<div key={order.id} className="bg-white p-4 rounded shadow-sm flex justify-between mb-2"><div><div className="font-bold">{order.type}</div><div className="text-sm text-gray-500">{order.pickup} &rarr; {order.dropoff}</div></div><div className="text-right"><Badge status={order.status}/><div className="font-bold mt-1">Rp {order.price.toLocaleString()}</div></div></div>))}</div>
+                        )}
+                        {activeMenu === 'profile' && (
+                            <div className="max-w-lg mx-auto bg-white p-8 rounded-2xl shadow text-center"><div className="w-24 h-24 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-4xl font-bold mx-auto mb-4">{user.name.charAt(0)}</div><h2 className="text-2xl font-bold mb-1">{user.name}</h2><p className="text-gray-500 mb-6 capitalize">{user.role}</p><div className="bg-gray-50 p-4 rounded-xl text-left space-y-3 text-sm"><div><span className="block text-xs text-gray-400 uppercase">WhatsApp</span><span className="font-bold">{user.wa}</span></div><div><span className="block text-xs text-gray-400 uppercase">Alamat</span><span className="font-bold">{user.address}</span></div></div></div>
                         )}
 
                     </div>
