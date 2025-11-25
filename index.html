@@ -3,817 +3,479 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OjekWarga - Super App</title>
+    <title>OjekCepat - Master App V8</title>
     
-    <!-- Styling: Tailwind CSS -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Import Library Terbaru -->
-    <script type="importmap">
-    {
-        "imports": {
-            "react": "https://esm.sh/react@18.2.0",
-            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-            "lucide-react": "https://esm.sh/lucide-react@latest", 
-            "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
-            "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
-            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
-        }
-    }
-    </script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Babel untuk JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f3f4f6; }
-        .loader { border: 3px solid #f3f3f3; border-radius: 50%; border-top: 3px solid #f97316; width: 20px; height: 20px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        body { font-family: 'Poppins', sans-serif; background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
+        
+        /* Toast */
+        #toast-container { position: fixed; top: 24px; right: 24px; z-index: 9999; pointer-events: none; }
+        .toast { pointer-events: auto; background: white; padding: 16px 24px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-left: 6px solid #10b981; margin-bottom: 12px; display: flex; align-items: center; animation: slideIn 0.3s cubic-bezier(0.21, 1.02, 0.73, 1); width: max-content; max-width: 90vw; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        .pin-input { letter-spacing: 0.5em; font-family: monospace; text-align: center; }
+        .suggestions-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-top: none; z-index: 10; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .suggestions-list li { padding: 8px 12px; cursor: pointer; font-size: 14px; color: #333; }
+        .suggestions-list li:hover { background: #f0f0f0; }
+        .disabled-button { opacity: 0.6; cursor: not-allowed; }
     </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="text-slate-800 h-screen overflow-hidden flex flex-col">
 
-    <script type="text/babel" data-type="module">
-        import React, { useState, useEffect, useRef } from 'react';
-        import { createRoot } from 'react-dom/client';
-        import { 
-            Bike, User, MapPin, Home, History, LogOut, PlusCircle, CheckCircle, Menu, 
-            Navigation, Phone, MessageCircle, Store, Package, Calculator, Search, 
-            Utensils, Shirt, PhoneCall, Lock, Eye, EyeOff, ShieldAlert, KeyRound, 
-            Info, ShieldCheck, UserCircle, FileText, UserCog, UserX, UserCheck, 
-            Power, Coffee, Car, Truck, Flag, Trash2, X, Radar, Banknote, CreditCard, 
-            Calendar, ChevronLeft, ChevronRight, CheckSquare, Download, Shield, 
-            Clock, Headphones, ListPlus, Trash, TrendingUp 
-        } from 'lucide-react';
+    <div id="toast-container"></div>
 
-        import { initializeApp } from 'firebase/app';
-        import { getFirestore, collection, addDoc, updateDoc, doc, getDoc, getDocs, query, where, setDoc, onSnapshot, writeBatch, deleteDoc } from 'firebase/firestore';
-        import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+    <!-- --- MODALS --- -->
 
-        // --- CONFIG ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyAfRv6lA2U2ntFu-jgzpm5uoBxSkPyjVC4", 
-            authDomain: "gotransite.firebaseapp.com",
-            projectId: "gotransite",
-            storageBucket: "gotransite.firebasestorage.app",
-            messagingSenderId: "991886146654",
-            appId: "1:991886146654:web:87900e39e1e3421320c8cf"
-        };
+    <!-- ADMIN PIN -->
+    <div id="admin-login-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-backdrop fade-in">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-xs w-full p-6 relative mx-4 text-center">
+            <button onclick="closeModal('admin-login-modal')" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><i class="fas fa-times text-lg"></i></button>
+            <div class="mb-4"><div class="w-14 h-14 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl"><i class="fas fa-lock"></i></div><h3 class="text-lg font-bold">Akses Admin</h3></div>
+            <input type="password" id="admin-pin-input" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-center text-xl font-bold outline-none focus:border-purple-500 mb-4 pin-input" placeholder="•••••••" maxlength="7">
+            <button onclick="window.verifyAdminPin()" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition shadow-lg">Buka Panel</button>
+        </div>
+    </div>
+
+    <!-- AUTH MODAL (LOGIN/REGISTER) -->
+    <div id="auth-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-backdrop fade-in">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative mx-4 max-h-[90vh] overflow-y-auto">
+            <button onclick="closeModal('auth-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            <div class="text-center mb-6">
+                <div id="auth-icon" class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-sm"><i class="fas fa-user"></i></div>
+                <h3 id="auth-title" class="text-2xl font-bold text-slate-800">Login</h3>
+                <p class="text-sm text-slate-500 mt-1">Gunakan No. WA & PIN</p>
+            </div>
+            <div class="space-y-4">
+                <div><label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Nomor WhatsApp</label><input type="tel" id="auth-phone" placeholder="08xxxxxxxxxx" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-lg font-bold text-slate-800 focus:border-blue-500 outline-none"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">PIN (6 Digit)</label><input type="password" id="auth-pin" placeholder="••••••" maxlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-lg font-bold text-slate-800 focus:border-blue-500 outline-none pin-input"></div>
+                <div class="text-right"><button onclick="window.openForgotPin()" class="text-xs text-blue-500 hover:text-blue-700 font-bold hover:underline">Lupa PIN?</button></div>
+                <div id="auth-extra-fields" class="space-y-3 hidden border-t border-slate-100 pt-3 mt-2"></div>
+                <button onclick="window.processAuth()" id="auth-btn" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition shadow-lg transform active:scale-95 mt-2">Masuk / Daftar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FORGOT PIN -->
+    <div id="forgot-pin-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center modal-backdrop fade-in">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-xs w-full p-6 relative mx-4 text-center">
+            <button onclick="closeModal('forgot-pin-modal')" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><i class="fas fa-times text-lg"></i></button>
+            <div class="mb-4"><div class="w-12 h-12 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl"><i class="fas fa-key"></i></div><h3 class="text-lg font-bold">Lupa PIN?</h3><p class="text-xs text-slate-500">Hubungi Admin untuk reset.</p></div>
+            <div class="space-y-2">
+                <button onclick="window.contactAdminReset('6281311314203')" class="w-full bg-green-500 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-green-600 flex items-center justify-center"><i class="fab fa-whatsapp mr-2 text-lg"></i> Chat Admin 1</button>
+                <button onclick="window.contactAdminReset('6281299988548')" class="w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-emerald-700 flex items-center justify-center"><i class="fab fa-whatsapp mr-2 text-lg"></i> Chat Admin 2</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOP UP MODAL -->
+    <div id="topup-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-backdrop fade-in">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative mx-4 max-h-[90vh] overflow-y-auto">
+            <button onclick="closeModal('topup-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            <div class="text-center mb-5"><div class="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl"><i class="fas fa-wallet"></i></div><h3 class="text-lg font-bold">Isi Saldo</h3><p class="text-xs text-gray-500">Transfer manual ke rekening Admin</p></div>
+            <div id="modal-bank-list" class="bg-slate-50 p-3 rounded-xl border border-slate-200 mb-4 space-y-2 text-sm">Loading...</div>
+            <div class="bg-blue-50 p-3 rounded-xl border border-blue-100 mb-4 text-center"><p class="text-[10px] text-blue-600 font-bold uppercase">ID User Anda</p><p id="modal-user-id" class="font-mono font-bold text-lg text-blue-800 select-all cursor-pointer" onclick="copyText(this.innerText)">...</p></div>
+            <div class="space-y-2">
+                <button onclick="window.confirmToAdmin('6281311314203')" class="w-full flex items-center justify-center bg-green-500 text-white font-bold py-2.5 rounded-xl hover:bg-green-600 text-sm"><i class="fab fa-whatsapp mr-2 text-lg"></i> Konfirmasi Admin 1</button>
+                <button onclick="window.confirmToAdmin('6281299988548')" class="w-full flex items-center justify-center bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 text-sm"><i class="fab fa-whatsapp mr-2 text-lg"></i> Konfirmasi Admin 2</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- SCREEN: ROLE SELECTION --- -->
+    <div id="role-selection-screen" class="fixed inset-0 z-40 flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-5xl w-full text-center fade-in">
+            <div class="mb-8"><div class="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-3 shadow-md"><i class="fas fa-motorcycle text-3xl text-green-600"></i></div><h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">Ojek<span class="text-green-500">Cepat</span></h1><div id="firebase-status" class="mt-2 text-xs font-medium text-slate-400 bg-slate-100 inline-block px-3 py-1 rounded-full">Menghubungkan...</div></div>
+            <div id="role-buttons" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <button onclick="prepAuth('passenger')" class="p-5 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition text-left group disabled-button" disabled>
+                    <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-3 text-xl"><i class="fas fa-user"></i></div>
+                    <h3 class="font-bold text-slate-800">Penumpang</h3><p class="text-xs text-slate-500">Pesan Ojek</p>
+                </button>
+                <button onclick="prepAuth('driver')" class="p-5 rounded-xl border border-slate-200 hover:border-green-500 hover:bg-green-50 transition text-left group disabled-button" disabled>
+                    <div class="w-10 h-10 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mb-3 text-xl"><i class="fas fa-biking"></i></div>
+                    <h3 class="font-bold text-slate-800">Driver</h3><p class="text-xs text-slate-500">Ambil Order</p>
+                </button>
+                <button onclick="prepAuth('merchant')" class="p-5 rounded-xl border border-slate-200 hover:border-orange-500 hover:bg-orange-50 transition text-left group disabled-button" disabled>
+                    <div class="w-10 h-10 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center mb-3 text-xl"><i class="fas fa-store"></i></div>
+                    <h3 class="font-bold text-slate-800">Merchant</h3><p class="text-xs text-slate-500">Jual Makanan</p>
+                </button>
+                <button onclick="openAdminLogin()" class="p-5 rounded-xl border border-slate-200 hover:border-purple-500 hover:bg-purple-50 transition text-left group disabled-button" disabled>
+                    <div class="w-10 h-10 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center mb-3 text-xl"><i class="fas fa-lock"></i></div>
+                    <h3 class="font-bold text-slate-800">Admin</h3><p class="text-xs text-slate-500">Panel Kontrol</p>
+                </button>
+            </div>
+        </div>
+        <p class="text-slate-500 mt-8 text-xs">© 2024 OjekCepat Indonesia - V8.0 Final Stability</p>
+    </div>
+
+    <!-- --- MAIN APP CONTAINER --- -->
+    <div id="main-app" class="hidden flex h-screen bg-slate-50">
+        <aside class="w-64 bg-white shadow-xl z-30 flex flex-col border-r border-slate-200 hidden md:flex">
+            <div class="h-16 flex items-center px-6 border-b border-slate-100"><i class="fas fa-motorcycle text-green-500 text-xl mr-2"></i><span class="text-lg font-bold text-slate-800">Ojek<span class="text-green-500">Cepat</span></span></div>
+            <div class="p-5 border-b border-slate-50"><div class="flex items-center space-x-3"><div id="sidebar-avatar" class="w-10 h-10 rounded-full flex items-center justify-center text-lg text-white bg-gray-300 shrink-0 shadow"><i class="fas fa-user"></i></div><div class="overflow-hidden"><h4 id="sidebar-username" class="font-bold text-slate-800 truncate text-sm">User</h4><span id="sidebar-role" class="text-[10px] uppercase tracking-wider font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">ROLE</span></div></div></div>
+            <div id="sidebar-wallet" class="hidden px-4 py-4"><div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-4 text-white shadow-md relative overflow-hidden cursor-pointer group" onclick="openModal('topup-modal')"><p class="text-[10px] text-green-100 font-medium uppercase tracking-wide">Saldo Saya</p><h3 id="wallet-balance" class="text-xl font-bold mt-1">Rp 0</h3><div class="mt-3 text-[10px] font-bold bg-white/20 w-max px-2 py-1 rounded flex items-center"><i class="fas fa-plus mr-1"></i> Isi Saldo</div></div></div>
+            <nav id="sidebar-menu" class="flex-1 overflow-y-auto py-4 px-3 space-y-1"></nav>
+            <div class="p-4 border-t border-slate-100"><button onclick="window.logout()" class="flex items-center w-full px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg transition text-sm font-bold"><i class="fas fa-sign-out-alt w-4 mr-3"></i> Keluar</button></div>
+        </aside>
+        <div class="md:hidden bg-white h-14 flex items-center justify-between px-4 shadow-sm z-20"><span class="font-bold text-slate-800 flex items-center"><i class="fas fa-motorcycle text-green-500 mr-2"></i>OjekCepat</span><button onclick="window.logout()" class="text-red-500 text-xs font-bold border border-red-200 px-3 py-1 rounded-full">Keluar</button></div>
+        <main class="flex-1 flex flex-col overflow-hidden relative"><div id="content-container" class="flex-1 overflow-y-auto p-4 md:p-8 relative scroll-smooth"></div></main>
+    </div>
+
+    <!-- FIREBASE & LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, setDoc, onSnapshot, updateDoc, increment, query, orderBy, limit, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAfRv6lA2U2ntFu-jgzpm5uoBxSkPyjVC4", authDomain: "gotransite.firebaseapp.com", projectId: "gotransite", storageBucket: "gotransite.firebasestorage.app", messagingSenderId: "991886146654", appId: "1:991886146654:web:87900e39e1e3421320c8cf" };
         const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
         const auth = getAuth(app);
-        const appId = "ojek-warga-prod-v2"; // Versi Baru agar bersih
+        const db = getFirestore(app);
+        const APP_ID = 'ojek-cepat-v7-master'; 
 
-        const ADMIN_SECRET_PIN = '888888';
-        const OWNER_SECRET_PIN = '769108';
-        const MASTER_RESET_CODE = '888888';
-        const ADMIN_FEE = 0.15;
-        const ADMIN_WA_NUMBER = '6281311314203';
-        const ITEMS_PER_PAGE = 5;
+        let currentUser = null, currentRole = '', userPhone = '', driverData = null, merchantData = null;
+        let bankSettings = [];
+        let cart = [];
+        let unsubs = []; 
+        let pendingAuthRole = '';
+        let isFirebaseReady = false; // NEW GLOBAL CHECK
+        const locationState = { pickup: { lat: null, lon: null, address: '' }, destination: { lat: null, lon: null, address: '' }, distance: 0, mode: 'transport' };
 
-        // --- COMPONENTS ---
-        const Card = ({ children, className="" }) => <div className={`bg-white rounded-2xl shadow-sm p-5 border border-gray-100 ${className}`}>{children}</div>;
-        
-        const Badge = ({ status, type }) => {
-            const colors = { pending: 'bg-yellow-100 text-yellow-700', accepted: 'bg-blue-100 text-blue-700', completed: 'bg-green-100 text-green-700', cancelled: 'bg-red-100 text-red-700' };
-            return <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
+        // --- UTILS ---
+        window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+        window.showToast = (msg, type='success') => {
+            const c = document.getElementById('toast-container');
+            const d = document.createElement('div');
+            d.className = `toast border-l-4 ${type==='error'?'border-red-500':'border-green-500'}`;
+            d.innerHTML = `<i class="fas ${type==='error'?'fa-exclamation-circle text-red-500':'fa-check-circle text-green-500'} mr-3"></i><span>${msg}</span>`;
+            c.appendChild(d); setTimeout(()=>d.remove(), 3000);
+        };
+        window.copyText = (t) => { navigator.clipboard.writeText(t); window.showToast('Disalin!'); };
+        function safeSetText(id, text) { const el = document.getElementById(id); if(el) el.innerText = text; }
+
+        async function initFirebase() {
+            try { 
+                await signInAnonymously(auth); 
+                document.getElementById('firebase-status').innerHTML = '<span class="text-green-500 font-bold">● Online</span>'; 
+                isFirebaseReady = true;
+                // Enable buttons once online
+                document.querySelectorAll('#role-buttons button').forEach(btn => {
+                    btn.removeAttribute('disabled');
+                    btn.classList.remove('disabled-button');
+                });
+
+                // Listen to bank settings (for Top Up Modal)
+                onSnapshot(doc(db, 'artifacts', APP_ID, 'public', 'settings'), (s) => { if(s.exists()) bankSettings = s.data().banks || []; });
+            } catch(e) { 
+                console.error("Firebase Init Error", e);
+                document.getElementById('firebase-status').innerHTML = '<span class="text-red-500 font-bold">● Error Koneksi</span>';
+                isFirebaseReady = false;
+                showToast("Gagal terhubung ke Firebase. Cek koneksi.", "error");
+            }
+        }
+        initFirebase();
+        onAuthStateChanged(auth, (u) => { currentUser = u; });
+
+        // --- AUTH & PIN (V8 Logic) ---
+
+        window.openAdminLogin = () => { document.getElementById('admin-pin-input').value = ''; window.openModal('admin-login-modal'); };
+        window.verifyAdminPin = () => {
+            if(document.getElementById('admin-pin-input').value === '7691088') {
+                window.closeModal('admin-login-modal'); window.selectRole('admin'); showToast("Login Admin Berhasil");
+            } else showToast("PIN Salah!", "error");
+        };
+        window.openForgotPin = () => { window.closeModal('auth-modal'); window.openModal('forgot-pin-modal'); };
+        window.contactAdminReset = (ph) => {
+             window.open(`https://wa.me/${ph}?text=${encodeURIComponent("Halo Admin, saya lupa PIN akun OjekCepat saya. Mohon bantuannya untuk reset.")}`, '_blank');
+             window.closeModal('forgot-pin-modal');
         };
 
-        const LocationInput = ({ label, placeholder, onSelect, initialValue, readOnly }) => {
-            const [val, setVal] = useState(initialValue || '');
-            const [res, setRes] = useState([]);
-            const [open, setOpen] = useState(false);
-            const [loading, setLoading] = useState(false);
+        window.prepAuth = (role) => {
+            if (!isFirebaseReady) {
+                 showToast("Aplikasi belum terhubung. Coba lagi.", "error");
+                 return;
+            }
+            pendingAuthRole = role;
+            const title = document.getElementById('auth-title');
+            const extra = document.getElementById('auth-extra-fields');
+            const icon = document.getElementById('auth-icon');
             
-            useEffect(() => { setVal(initialValue || ''); }, [initialValue]);
+            document.getElementById('auth-phone').value = ''; document.getElementById('auth-pin').value = '';
+            extra.innerHTML = ''; extra.classList.add('hidden');
 
-            useEffect(() => {
-                if(readOnly || !val || val.length < 3) return;
-                const timer = setTimeout(async () => {
-                    setLoading(true);
-                    try {
-                        const req = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&countrycodes=id&limit=5`);
-                        const data = await req.json();
-                        setRes(data || []);
-                        if(!readOnly) setOpen(true);
-                    } catch(e) {} finally { setLoading(false); }
-                }, 800);
-                return () => clearTimeout(timer);
-            }, [val, readOnly]);
-
-            return (
-                <div className="mb-3 relative">
-                    <label className="text-xs font-bold text-gray-500 uppercase">{label}</label>
-                    <div className="relative">
-                        <MapPin size={16} className="absolute left-3 top-3 text-gray-400"/>
-                        <input 
-                            className={`w-full pl-10 p-2 border rounded-lg text-sm ${readOnly ? 'bg-gray-100 text-gray-500' : 'bg-white focus:ring-2 focus:ring-orange-500 outline-none'}`}
-                            value={val}
-                            onChange={e => { setVal(e.target.value); if(!e.target.value) setOpen(false); }}
-                            placeholder={placeholder}
-                            readOnly={readOnly}
-                        />
-                        {loading && <Loader2 size={16} className="absolute right-3 top-3 text-orange-500 animate-spin"/>}
-                    </div>
-                    {open && res.length > 0 && (
-                        <div className="absolute z-10 w-full bg-white shadow-xl border mt-1 rounded-lg max-h-48 overflow-y-auto">
-                            {res.map((r, i) => (
-                                <div key={i} onClick={() => { 
-                                    setVal(r.display_name); 
-                                    setOpen(false); 
-                                    onSelect({ name: r.display_name, lat: parseFloat(r.lat), lng: parseFloat(r.lon) }); 
-                                }} className="p-2 text-xs border-b hover:bg-orange-50 cursor-pointer truncate">
-                                    {r.display_name}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            );
+            if(role === 'passenger') {
+                title.innerText = "Login Penumpang";
+                icon.className = "w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-sm";
+                icon.innerHTML = '<i class="fas fa-user"></i>';
+            } else if(role === 'driver') {
+                title.innerText = "Login Driver";
+                icon.className = "w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-sm";
+                icon.innerHTML = '<i class="fas fa-biking"></i>';
+                extra.innerHTML = `
+                    <input id="reg-drv-name" placeholder="Nama Lengkap" class="w-full border p-3 rounded-xl">
+                    <input id="reg-drv-address" placeholder="Alamat Sesuai KTP" class="w-full border p-3 rounded-xl">
+                    <input id="reg-drv-plate" placeholder="Plat Nomor" class="w-full border p-3 rounded-xl uppercase">
+                    <p class="text-[10px] text-orange-500 italic">*Isi data ini jika Anda baru pertama kali login sebagai Driver.</p>
+                `;
+                extra.classList.remove('hidden');
+            } else if(role === 'merchant') {
+                title.innerText = "Login Merchant";
+                icon.className = "w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-sm";
+                icon.innerHTML = '<i class="fas fa-store"></i>';
+                extra.innerHTML = `<input id="reg-merch-name" placeholder="Nama Toko" class="w-full border p-3 rounded-xl"><input id="reg-merch-addr" placeholder="Alamat" class="w-full border p-3 rounded-xl">
+                <p class="text-[10px] text-orange-500 italic">*Isi data ini jika Anda baru pertama kali login sebagai Merchant.</p>`;
+                extra.classList.remove('hidden');
+            }
+            window.openModal('auth-modal');
         };
 
-        // --- HELPERS ---
-        const sanitizeId = (text) => text ? text.replace(/[^a-zA-Z0-9]/g, '') : '';
-        const formatWA = (num) => num ? (num.startsWith('0') ? '62' + num.slice(1) : num) : '';
-        const getRoadDistance = async (lat1, lng1, lat2, lng2) => {
+        window.processAuth = async () => {
+             if (!isFirebaseReady) return showToast("Gagal terhubung ke server", "error");
+            
+            const btn = document.getElementById('auth-btn');
+            const originalText = btn.innerText;
+            btn.innerText = "Memproses..."; 
+            btn.disabled = true;
+
+            const ph = document.getElementById('auth-phone').value.trim();
+            const pin = document.getElementById('auth-pin').value.trim();
+            if(ph.length < 8 || pin.length < 4) { showToast("Data tidak valid", "error"); btn.innerText = originalText; btn.disabled = false; return; }
+            const ref = doc(db, 'artifacts', APP_ID, 'users', ph);
+            
             try {
-                const url = `https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=false`;
-                const res = await fetch(url);
-                const data = await res.json();
-                if (data.code === 'Ok' && data.routes?.[0]) return (data.routes[0].distance / 1000).toFixed(1);
-                return null;
-            } catch { return null; }
-        };
-        const calculateDistanceFallback = (lat1, lon1, lat2, lon2) => {
-            const R = 6371; 
-            const dLat = (lat2 - lat1) * Math.PI/180;
-            const dLon = (lon2 - lon1) * Math.PI/180;
-            const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)*Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return (R * c * 1.4).toFixed(1);
-        };
-        const getCoordinates = async (addr) => {
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr + ', Indonesia')}&limit=1`);
-                const data = await res.json();
-                if(data?.[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), name: data[0].display_name };
-                return null;
-            } catch { return null; }
-        };
-
-        // --- MAIN APP ---
-        function App() {
-            const [user, setUser] = useState(() => {
-                try { return JSON.parse(localStorage.getItem('ow_user')) || null; } catch { return null; }
-            });
-            const [screen, setScreen] = useState(user ? 'dashboard' : 'landing');
-            const [role, setRole] = useState(null);
-            const [orders, setOrders] = useState([]);
-            
-            // Form
-            const [form, setForm] = useState({ name:'', wa:'', pin:'', address:'', plate:'', motor:'', shopName:'', vehicleType:'Motor' });
-            const [inputPin, setInputPin] = useState('');
-            const [isOnline, setIsOnline] = useState(true);
-
-            // Order
-            const [menu, setMenu] = useState([]);
-            const [cart, setCart] = useState({});
-            const [merchants, setMerchants] = useState([]);
-            const [selMerchant, setSelMerchant] = useState('');
-            const [pickup, setPickup] = useState(null);
-            const [dropoff, setDropoff] = useState(null);
-            const [price, setPrice] = useState(0);
-            const [dist, setDist] = useState(0);
-            const [vehicle, setVehicle] = useState('Motor');
-            const [orderDetail, setOrderDetail] = useState('');
-            const [loading, setLoading] = useState(false);
-            const [itemCost, setItemCost] = useState(0);
-            
-            // Admin
-            const [drivers, setDrivers] = useState([]);
-            const [finUnlocked, setFinUnlocked] = useState(false);
-            const [activeMenu, setActiveMenu] = useState('dashboard');
-            const [mobileMenu, setMobileMenu] = useState(false);
-            const [newItemName, setNewItemName] = useState('');
-            const [newItemPrice, setNewItemPrice] = useState('');
-            
-            // States
-            const [trackId, setTrackId] = useState(null);
-            const [financeTab, setFinanceTab] = useState('driver');
-            const [showForgotPin, setShowForgotPin] = useState(false);
-            const [otp, setOtp] = useState('');
-            const [newPin, setNewPin] = useState('');
-            const [isResetting, setIsResetting] = useState(false);
-            const [financePinInput, setFinancePinInput] = useState('');
-            const [showFinancePinModal, setShowFinancePinModal] = useState(false);
-            const [processingDriverId, setProcessingDriverId] = useState(null);
-            const [markingPaid, setMarkingPaid] = useState(null);
-            const [processingOrder, setProcessingOrder] = useState(null);
-            const [completingOrder, setCompletingOrder] = useState(null);
-            const [currentPage, setCurrentPage] = useState(1);
-
-            // Init
-            useEffect(() => {
-                signInAnonymously(auth);
-                if(user) {
-                    const q = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
-                    return onSnapshot(q, s => {
-                        const d = s.docs.map(x => ({id: x.id, ...x.data()})).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-                        setOrders(d);
-                    });
-                }
-            }, [user]);
-
-            const logout = () => { localStorage.removeItem('ow_user'); setUser(null); setScreen('landing'); };
-            const saveUser = (u) => { localStorage.setItem('ow_user', JSON.stringify(u)); setUser(u); setScreen('dashboard'); };
-
-            const checkWA = async () => {
-                if(!form.wa) return alert("Isi nomor WA");
-                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(form.wa));
                 const snap = await getDoc(ref);
                 if(snap.exists()) {
-                    const d = snap.data();
-                    if(d.role !== role) return alert(`Nomor ini terdaftar sebagai ${d.role}`);
-                    if(d.status === 'suspended') return alert("Akun dinonaktifkan Admin.");
-                    setForm({...form, ...d}); 
-                    setScreen('pin');
+                    const data = snap.data();
+                    if(data.pin === pin) {
+                        userPhone = ph;
+                        
+                        // --- UPGRADE/LOAD LOGIC ---
+                        if(pendingAuthRole === 'driver') {
+                             const n = document.getElementById('reg-drv-name').value;
+                             const addr = document.getElementById('reg-drv-address').value;
+                             const p = document.getElementById('reg-drv-plate').value;
+                            if(!data.driverInfo && n && addr && p) { // Upgrade account to driver
+                                const newDrv = { name: n, address: addr, plate: p, type: 'Motor', isOnline: true };
+                                await updateDoc(ref, { driverInfo: newDrv }); driverData = newDrv;
+                            } else if (data.driverInfo) driverData = data.driverInfo;
+                        }
+                        if(pendingAuthRole === 'merchant') {
+                            const n = document.getElementById('reg-merch-name').value;
+                            const a = document.getElementById('reg-merch-addr').value;
+                            if(!data.merchantInfo && n && a) { // Upgrade account to merchant
+                                const newMerch = { name: n, address: a, phone: ph };
+                                await updateDoc(ref, { merchantInfo: newMerch }); merchantData = newMerch;
+                            } else if (data.merchantInfo) merchantData = data.merchantInfo;
+                        }
+
+                        window.selectRole(pendingAuthRole); closeModal('auth-modal');
+                    } else showToast("PIN Salah!", "error");
                 } else {
-                    setScreen('register');
+                    // --- REGISTER NEW USER ---
+                    let newData = { pin, role: pendingAuthRole, balance: 0, joined: serverTimestamp() };
+                    if(pendingAuthRole === 'driver') {
+                        const n = document.getElementById('reg-drv-name').value;
+                        const addr = document.getElementById('reg-drv-address').value;
+                        const p = document.getElementById('reg-drv-plate').value;
+                        if(!n || !addr || !p) { showToast("Lengkapi data driver", "error"); btn.innerText = originalText; btn.disabled = false; return; }
+                        newData.driverInfo = { name: n, address: addr, plate: p, type: 'Motor', isOnline: true }; driverData = newData.driverInfo;
+                    } else if(pendingAuthRole === 'merchant') {
+                        const n = document.getElementById('reg-merch-name').value;
+                        const a = document.getElementById('reg-merch-addr').value;
+                        if(!n || !a) { showToast("Lengkapi data toko", "error"); btn.innerText = originalText; btn.disabled = false; return; }
+                        newData.merchantInfo = { name: n, address: a, phone: ph }; merchantData = newData.merchantInfo;
+                    }
+                    await setDoc(ref, newData);
+                    userPhone = ph; window.selectRole(pendingAuthRole); closeModal('auth-modal'); showToast("Terdaftar!");
                 }
-            };
+            } catch(e) { showToast("Gagal Login (Error Server/Data)", "error"); }
+            finally { btn.innerText = originalText; btn.disabled = false; }
+        };
 
-            const register = async () => {
-                if(!form.name || !form.pin) return alert("Lengkapi data");
-                const u = { ...form, role, status: 'active', joined: new Date().toISOString(), isOnline: true };
-                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(form.wa)), u);
-                saveUser(u);
-            };
-
-            const login = () => {
-                if(inputPin === form.pin) saveUser(form);
-                else alert("PIN Salah");
-            };
-
-            const handleResetPin = async () => {
-                if(otp !== MASTER_RESET_CODE) return alert("Kode Otorisasi Salah! Minta ke Admin.");
-                if(!newPin || newPin.length < 4) return alert("PIN Baru minimal 4 digit.");
-                setIsResetting(true);
-                try {
-                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(form.wa));
-                    await updateDoc(ref, { pin: newPin });
-                    alert("Sukses! PIN berhasil diubah. Silakan login dengan PIN baru.");
-                    setForm({...form, pin: newPin}); 
-                    setShowForgotPin(false); setOtp(''); setNewPin(''); setScreen('pin'); 
-                } catch(e) { alert("Gagal reset PIN."); } finally { setIsResetting(false); }
-            };
-
-            const calcPrice = async () => {
-                if(!pickup || !dropoff) return;
-                setLoading(true);
-                let d = await getRoadDistance(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
-                if(!d) d = calculateDistanceFallback(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
-                setDist(d);
-                let base = 6000, perKm = 1600;
-                if(vehicle === 'Mobil') { base = 15000; perKm = 3000; }
-                if(vehicle === 'Pickup') { base = 60000; perKm = 5000; }
-                const cost = parseFloat(d) <= 1 ? base : base + ((parseFloat(d)-1)*perKm);
-                setPrice(Math.ceil(cost/500)*500);
-                setLoading(false);
-            };
+        // --- ROUTING ---
+        window.selectRole = (role) => {
+            currentRole = role;
+            document.getElementById('role-selection-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            unsubs.forEach(u => u()); unsubs = []; 
             
-            useEffect(() => { calcPrice() }, [pickup, dropoff, vehicle]);
+            const sidebar = document.getElementById('sidebar-menu');
+            const uname = document.getElementById('sidebar-username');
+            const avt = document.getElementById('sidebar-avatar');
+            document.getElementById('sidebar-wallet').classList.add('hidden');
+            document.getElementById('sidebar-role').innerText = role.toUpperCase();
 
-            // Load Merchants
-            useEffect(() => {
-                if(['food','laundry'].includes(activeMenu) && user) {
-                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where('role', '==', 'merchant'));
-                    getDocs(q).then(s => setMerchants(s.docs.map(d => ({id:d.id, ...d.data()}))));
-                }
-            }, [activeMenu]);
-            
-            // Load Menu Customer
-            useEffect(() => {
-                 if(selMerchant) {
-                     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'products'), where('merchantId', '==', selMerchant));
-                     getDocs(q).then(s => {
-                         setMenu(s.docs.map(d => ({id:d.id, ...d.data()})));
-                         setCart({});
-                     });
-                     const m = merchants.find(x => x.id === selMerchant);
-                     if(m) getCoordinates(m.address || m.shopAddress).then(c => {
-                         if(c) setPickup({name: c.name, lat: c.lat, lng: c.lng});
-                     });
-                 }
-            }, [selMerchant]);
+            if(role === 'admin') {
+                uname.innerText = "Administrator";
+                avt.className = "w-10 h-10 rounded-full flex items-center justify-center text-lg text-white bg-purple-600 shadow";
+                sidebar.innerHTML = `<div onclick="renderAdminV3()" class="p-3 rounded-xl bg-purple-50 text-purple-700 font-bold cursor-pointer">Panel Admin</div>`;
+                renderAdminV3();
+            } else if(role === 'passenger') {
+                uname.innerText = userPhone;
+                avt.className = "w-10 h-10 rounded-full flex items-center justify-center text-lg text-white bg-blue-500 shadow";
+                document.getElementById('sidebar-wallet').classList.remove('hidden');
+                document.getElementById('modal-user-id').innerText = userPhone;
+                unsubs.push(onSnapshot(doc(db,'artifacts',APP_ID,'users',userPhone), s=>{ safeSetText('wallet-balance', "Rp "+(s.exists()?(s.data().balance||0):0).toLocaleString('id-ID')); }));
+                renderPassenger();
+            } else if(role === 'driver') {
+                uname.innerText = driverData?.name || "Driver";
+                avt.className = "w-10 h-10 rounded-full flex items-center justify-center text-lg text-white bg-green-600 shadow";
+                renderDriver();
+            } else if(role === 'merchant') {
+                uname.innerText = merchantData?.name || "Merchant";
+                avt.className = "w-10 h-10 rounded-full flex items-center justify-center text-lg text-white bg-orange-500 shadow";
+                renderMerchant();
+            }
+        };
+        
+        // --- ADMIN LOGIC V3 --- (Same as previous stable version)
+        window.renderAdminV3 = () => {
+            const c = document.getElementById('content-container');
+            c.innerHTML = `
+                <div class="flex space-x-2 border-b border-slate-200 mb-6 overflow-x-auto">
+                    <button onclick="switchAdmTab('dash')" id="tab-dash" class="pb-2 px-4 font-bold text-sm border-b-2 border-transparent">Dashboard</button>
+                    <button onclick="switchAdmTab('trx')" id="tab-trx" class="pb-2 px-4 font-bold text-sm border-b-2 border-transparent">Transaksi</button>
+                    <button onclick="switchAdmTab('fin')" id="tab-fin" class="pb-2 px-4 font-bold text-sm border-b-2 border-transparent">Keuangan</button>
+                    <button onclick="switchAdmTab('users')" id="tab-users" class="pb-2 px-4 font-bold text-sm border-b-2 border-transparent">Kelola User</button>
+                </div>
+                <div id="adm-content" class="fade-in"></div>
+            `;
+            window.switchAdmTab('dash');
+        };
 
-            // Load Menu Merchant
-            useEffect(() => {
-                if(activeMenu === 'manage_menu' && user?.role === 'merchant') {
-                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'products'), where('merchantId', '==', user.wa));
-                    const unsub = onSnapshot(q, (s) => {
-                         setMenu(s.docs.map(d => ({id:d.id, ...d.data()})));
-                    });
-                    return () => unsub();
-                }
-            }, [activeMenu]);
+        window.switchAdmTab = (tab) => {
+            ['dash','trx','fin','users'].forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                if(el) el.className = t===tab ? "pb-2 px-4 font-bold text-sm border-b-2 border-purple-600 text-purple-700" : "pb-2 px-4 font-bold text-sm border-b-2 border-transparent text-slate-400 hover:text-purple-500";
+            });
+            const content = document.getElementById('adm-content');
+            if(!content) return;
 
-            useEffect(() => {
-                if(Object.keys(cart).length > 0) {
-                    const total = Object.values(cart).reduce((a,b) => a + (b.price * b.qty), 0);
-                    setItemCost(total);
-                } else {
-                    setItemCost(0);
-                }
-            }, [cart]);
-
-            const addMenuItem = async (e) => {
-                e.preventDefault();
-                if(!newItemName || !newItemPrice) return;
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
-                        merchantId: user.wa, 
-                        name: newItemName,
-                        price: parseInt(newItemPrice),
-                        createdAt: new Date().toISOString()
-                    });
-                    setNewItemName(''); setNewItemPrice('');
-                    alert("Menu berhasil ditambahkan!");
-                } catch (err) { console.error(err); }
-            };
-
-            const deleteMenuItem = async (id) => {
-                if(confirm("Hapus menu ini?")) {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
-                }
-            };
-
-            const updateCart = (item, delta) => {
-                setCart(prev => {
-                    const qty = (prev[item.id]?.qty || 0) + delta;
-                    if(qty <= 0) { const n = {...prev}; delete n[item.id]; return n; }
-                    return { ...prev, [item.id]: { ...item, qty } };
+            if(tab === 'dash') {
+                content.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-white p-5 rounded-2xl border shadow-sm"><p class="text-xs text-slate-400 font-bold uppercase">Total Order</p><h2 id="stat-tot" class="text-3xl font-bold text-slate-800">...</h2></div>
+                        <div class="bg-white p-5 rounded-2xl border shadow-sm"><p class="text-xs text-slate-400 font-bold uppercase">Profit (15%)</p><h2 id="stat-inc" class="text-3xl font-bold text-green-600">...</h2></div>
+                        <div class="bg-white p-5 rounded-2xl border shadow-sm"><p class="text-xs text-slate-400 font-bold uppercase">Active</p><h2 id="stat-act" class="text-3xl font-bold text-blue-600">...</h2></div>
+                    </div>`;
+                const q = query(collection(db, 'artifacts', APP_ID, 'public', 'transactions'), limit(100));
+                unsubs.push(onSnapshot(q, (s) => {
+                    let t=0, i=0, a=0; s.forEach(d => { const dat = d.data(); if(dat) { t++; if(dat.status === 'Menjemput') a++; if(dat.status === 'Selesai') i += ((Number(dat.price)||0)+(Number(dat.itemPrice)||0))*0.15; } });
+                    safeSetText('stat-tot', t); safeSetText('stat-inc', "Rp " + i.toLocaleString('id-ID')); safeSetText('stat-act', a);
+                }, (err) => console.log("Err", err)));
+            } else if (tab === 'trx') {
+                content.innerHTML = `<div class="bg-white rounded-xl border shadow-sm overflow-hidden"><table class="w-full text-sm text-left"><thead class="bg-slate-50 text-xs uppercase text-slate-400"><tr><th class="p-4">Layanan</th><th class="p-4">Status</th><th class="p-4 text-right">Total</th></tr></thead><tbody id="adm-tbody"><tr><td colspan="3" class="p-6 text-center text-slate-400">Memuat...</td></tr></tbody></table></div>`;
+                const q = query(collection(db, 'artifacts', APP_ID, 'public', 'transactions'), limit(50));
+                unsubs.push(onSnapshot(q, (s) => {
+                    const list = []; s.forEach(d => list.push({id:d.id, ...d.data()}));
+                    list.sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
+                    const tb = document.getElementById('adm-tbody');
+                    if(!tb) return;
+                    if(list.length===0) { tb.innerHTML='<tr><td colspan="3" class="p-6 text-center italic text-slate-400">Belum ada data transaksi.</td></tr>'; return; }
+                    tb.innerHTML = list.map(x => `<tr class="border-b hover:bg-slate-50"><td class="p-4"><div class="font-bold">${x.type}</div><div class="text-xs text-slate-400">${x.passengerName}</div></td><td class="p-4"><span class="px-2 py-1 rounded text-[10px] font-bold uppercase ${x.status==='Selesai'?'bg-green-100 text-green-600':'bg-blue-100 text-blue-600'}">${x.status}</span></td><td class="p-4 text-right font-bold">Rp ${((Number(x.price)||0)+(Number(x.itemPrice)||0)).toLocaleString()}</td></tr>`).join('');
+                }));
+            } else if (tab === 'fin') {
+                content.innerHTML = `<div class="grid md:grid-cols-2 gap-6"><div class="bg-white p-6 rounded-2xl border shadow-sm"><h4 class="font-bold mb-4">Top Up User</h4><input id="adm-topup-id" class="w-full border p-2 rounded mb-2 bg-slate-50" placeholder="No WA User"><input id="adm-topup-amt" type="number" class="w-full border p-2 rounded mb-4 bg-slate-50" placeholder="Nominal"><button onclick="window.admTopUp()" class="w-full bg-purple-600 text-white py-2 rounded font-bold">Kirim</button></div><div class="bg-white p-6 rounded-2xl border shadow-sm"><div class="flex justify-between mb-4"><h4 class="font-bold">Rekening Bank</h4><button onclick="window.admAddBank()" class="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold">+ Tambah</button></div><div id="adm-bank-list" class="space-y-2 max-h-60 overflow-y-auto mb-4"></div><button onclick="window.admSaveBank()" class="w-full bg-blue-600 text-white py-2 rounded font-bold">Simpan Perubahan</button></div></div>`;
+                window.renderAdmBanks();
+            } else if (tab === 'users') {
+                content.innerHTML = `<div class="bg-white p-6 rounded-2xl border shadow-sm max-w-md"><h4 class="font-bold mb-4">Reset PIN User</h4><div class="space-y-4"><div><label class="text-xs font-bold text-slate-400">Cari User (No WA)</label><div class="flex mt-1"><input id="adm-search-user" class="flex-1 border p-2 rounded-l bg-slate-50" placeholder="08xxx"><button onclick="window.admSearchUser()" class="bg-slate-200 px-4 rounded-r hover:bg-slate-300 font-bold"><i class="fas fa-search"></i></button></div></div><div id="adm-user-result" class="hidden bg-blue-50 p-3 rounded border border-blue-100"><p class="text-sm font-bold text-blue-800 mb-1">User Ditemukan!</p><p class="text-xs text-slate-600">Role: <span id="res-role" class="font-bold uppercase"></span></p><p class="text-xs text-slate-600 mb-2">Saldo: <span id="res-bal" class="font-bold"></span></p><input id="adm-new-pin" class="w-full border p-2 rounded bg-white text-center font-mono tracking-widest" placeholder="PIN Baru (6 Digit)" maxlength="6"><button onclick="window.admResetPin()" class="w-full bg-orange-500 text-white font-bold py-2 rounded mt-2 hover:bg-orange-600">Ganti PIN</button></div></div></div>`;
+            }
+        };
+        // Admin Actions
+        window.admSearchUser = async () => { const id = document.getElementById('adm-search-user').value.trim(); if(!id) return showToast("No WA kosong","error"); try { const snap = await getDoc(doc(db, 'artifacts', APP_ID, 'users', id)); if(snap.exists()) { const d = snap.data(); document.getElementById('adm-user-result').classList.remove('hidden'); document.getElementById('res-role').innerText = d.role || '-'; document.getElementById('res-bal').innerText = "Rp " + (d.balance||0).toLocaleString(); window.tempTargetUser = id; } else { showToast("User tidak ada","error"); document.getElementById('adm-user-result').classList.add('hidden'); } } catch(e) { showToast("Error","error"); } };
+        window.admResetPin = async () => { const p = document.getElementById('adm-new-pin').value; if(p.length < 4) return showToast("PIN pendek","error"); try { await updateDoc(doc(db, 'artifacts', APP_ID, 'users', window.tempTargetUser), { pin: p }); showToast("Sukses Reset PIN!"); } catch(e) { showToast("Gagal","error"); } };
+        window.admTopUp = async () => { const id=document.getElementById('adm-topup-id').value, amt=parseInt(document.getElementById('adm-topup-amt').value); if(!id||!amt) return showToast("Data invalid","error"); try { await setDoc(doc(db,'artifacts',APP_ID,'users',id), {balance:increment(amt)},{merge:true}); showToast("Top Up Sukses"); } catch(e){ showToast("Gagal","error"); } };
+        window.renderAdmBanks = () => { const c=document.getElementById('adm-bank-list'); if(!c)return; c.innerHTML = bankSettings.map((b,i)=>`<div class="bg-slate-50 p-2 rounded border relative"><button onclick="window.admDelBank(${i})" class="absolute top-1 right-1 text-red-400"><i class="fas fa-times"></i></button><div class="grid grid-cols-2 gap-2 mb-1"><input onchange="bankSettings[${i}].name=this.value" value="${b.name}" class="text-xs border p-1 rounded font-bold" placeholder="Bank"><input onchange="bankSettings[${i}].number=this.value" value="${b.number}" class="text-xs border p-1 rounded font-mono" placeholder="Rekening"></div><input onchange="bankSettings[${i}].holder=this.value" value="${b.holder||''}" class="w-full text-xs border p-1 rounded italic" placeholder="Atas Nama"></div>`).join(''); };
+        window.admAddBank=()=>{bankSettings.push({name:'',number:'',holder:''});window.renderAdmBanks();};
+        window.admDelBank=(i)=>{bankSettings.splice(i,1);window.renderAdmBanks();};
+        window.admSaveBank=async()=>{try{await setDoc(doc(db,'artifacts',APP_ID,'public','settings'),{banks:bankSettings});showToast("Tersimpan");}catch(e){}};
+        
+        // --- PASSENGER, DRIVER, MERCHANT ---
+        window.renderPassenger = () => {
+            document.getElementById('content-container').innerHTML = `
+                <div class="bg-blue-600 text-white p-6 rounded-3xl mb-6 shadow-lg"><h1 class="text-2xl font-bold">Halo!</h1><p>Mau kemana?</p></div>
+                <div id="marketplace-container" class="hidden mb-6"><div class="bg-orange-50 p-4 rounded-xl border border-orange-100 mb-4"><h3 class="font-bold text-orange-800 mb-2 flex items-center"><i class="fas fa-utensils mr-2"></i> Menu Tersedia</h3><div id="passenger-marketplace-list" class="space-y-2 max-h-60 overflow-y-auto pr-2"><p class="text-center text-sm text-gray-400">Memuat menu...</p></div></div><div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200"><h3 class="font-bold text-gray-700 mb-2 text-sm border-b pb-1">Keranjang Belanja</h3><div id="cart-items" class="space-y-1"><div class="text-center text-gray-400 text-xs py-2">Keranjang kosong</div></div></div></div>
+                <div class="bg-white p-5 rounded-xl shadow-md border border-gray-100 mb-6 relative z-10 -mt-4 mx-2"><div class="mb-4 relative"><div class="flex items-center bg-gray-50 rounded-lg px-4 py-3 mt-1 border border-gray-200"><i class="fas fa-map-marker-alt text-green-500 mr-3"></i><input type="text" id="input-pickup" oninput="window.handleInput('pickup', this.value)" autocomplete="off" placeholder="Jemput..." class="bg-transparent w-full outline-none text-gray-700 text-sm"><button onclick="window.getLocation('pickup')" class="ml-2 text-gray-400"><i class="fas fa-crosshairs"></i></button></div><ul id="suggestions-pickup" class="suggestions-list"></ul></div><div class="mt-2 ml-1 grid grid-cols-2 gap-2"><input type="text" id="detail-pickup" placeholder="Detail Gang/No" class="w-full text-sm bg-gray-50 border-b border-gray-200 outline-none py-1 px-2"><input type="text" id="coord-pickup" placeholder="Lat, Long" class="w-full text-sm bg-gray-50 border-b border-gray-200 outline-none py-1 px-2 font-mono"></div><div class="relative z-20 mt-6"><div class="flex items-center bg-gray-50 rounded-lg px-4 py-3 mt-1 border border-gray-200"><i class="fas fa-location-arrow text-red-500 mr-3"></i><input type="text" id="input-destination" oninput="window.handleInput('destination', this.value)" autocomplete="off" placeholder="Tujuan..." class="bg-transparent w-full outline-none text-gray-700 text-sm"></div><ul id="suggestions-destination" class="suggestions-list"></ul></div><div class="mt-2 ml-1 grid grid-cols-2 gap-2"><input type="text" id="detail-destination" placeholder="Detail..." class="w-full text-sm bg-gray-50 border-b border-gray-200 outline-none py-1 px-2"><input type="text" id="coord-destination" placeholder="Lat, Long" class="w-full text-sm bg-gray-50 border-b border-gray-200 outline-none py-1 px-2 font-mono"></div></div>
+                <div id="item-price-container" class="hidden bg-orange-50 p-4 rounded-xl border border-orange-100 mb-6 mx-2"><label class="text-xs font-bold text-orange-500 uppercase block">Harga Barang</label><div class="flex items-center bg-white rounded-lg px-4 py-3 border border-orange-200"><span class="text-gray-500 font-bold mr-2">Rp</span><input type="number" id="input-item-price" oninput="window.updatePricesUI()" placeholder="0" class="bg-transparent w-full outline-none text-gray-800 font-bold text-lg"></div></div>
+                <div class="bg-gray-100 p-1 rounded-xl flex mb-6 shadow-inner"><button id="btn-mode-transport" onclick="window.setServiceMode('transport')" class="flex-1 py-2 text-center bg-white text-green-600 font-bold shadow-sm rounded-lg transition-all"><i class="fas fa-user-friends mr-2"></i>Penumpang</button><button id="btn-mode-merchant" onclick="window.setServiceMode('merchant')" class="flex-1 py-2 text-center text-gray-500 hover:text-gray-700 font-medium transition-colors rounded-lg"><i class="fas fa-box-open mr-2"></i>Merchant</button></div>
+                <div id="distance-info" class="hidden mt-2 mb-4 text-center"><p class="text-xs text-slate-500">Jarak: <span id="dist-val" class="font-bold text-slate-800">0 km</span></p></div>
+                <div class="grid grid-cols-3 gap-3 mb-8 px-2"><div onclick="window.submitOrder('Motor', 'price-motor')" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center hover:shadow-md transition cursor-pointer hover:border-green-400"><div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 text-green-600"><i class="fas fa-motorcycle"></i></div><h3 id="lbl-motor" class="font-bold text-xs">Motor</h3><p id="price-motor" class="text-[10px] font-bold text-green-600 mt-1">Rp 10.000</p></div><div onclick="window.submitOrder('Mobil', 'price-mobil')" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center hover:shadow-md transition cursor-pointer hover:border-blue-400"><div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2 text-blue-600"><i class="fas fa-car"></i></div><h3 id="lbl-mobil" class="font-bold text-xs">Mobil</h3><p id="price-mobil" class="text-[10px] font-bold text-blue-600 mt-1">Rp 20.000</p></div><div onclick="window.submitOrder('Pickup', 'price-pickup')" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center hover:shadow-md transition cursor-pointer hover:border-purple-400"><div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2 text-purple-600"><i class="fas fa-truck-pickup"></i></div><h3 id="lbl-pickup" class="font-bold text-xs">Pickup</h3><p id="price-pickup" class="text-[10px] font-bold text-purple-600 mt-1">Rp 40.000</p></div></div>`;
+                window.setServiceMode('transport');
+        };
+        window.submitOrder = async (veh, elId) => {
+            if(!currentUser) return showToast("Login Error","error");
+            const price = parseInt(document.getElementById(elId).innerText.replace(/[^0-9]/g, ''));
+            if(userBalance < price) { showToast("Saldo Kurang","error"); return openModal('topup-modal'); }
+            const p=document.getElementById('input-pickup').value, d=document.getElementById('input-destination').value;
+            if(!p||!d) return showToast("Isi lokasi","error");
+            try {
+                await updateDoc(doc(db, 'artifacts', APP_ID, 'users', userPhone), { balance: increment(-price) });
+                await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'transactions'), {
+                    type: `${locationState.mode==='merchant'?'Merchant':'Ojek'} ${veh}`, vehicleReq: veh, price, passengerName: userPhone, status: 'Menunggu', timestamp: serverTimestamp(), pickup: p, destination: d
                 });
-            };
+                showToast("Order Dibuat"); cart=[]; window.renderCart();
+            } catch(e) { showToast("Gagal Order","error"); }
+        };
+        window.setServiceMode = (m) => {
+            locationState.mode = m;
+            const isMerch = m==='merchant';
+            document.getElementById('item-price-container').classList.toggle('hidden', !isMerch);
+            document.getElementById('marketplace-container').classList.toggle('hidden', !isMerch);
+            document.getElementById('btn-mode-transport').className = isMerch ? "flex-1 py-2 text-center text-gray-500 hover:text-gray-700 font-medium transition-colors rounded-lg" : "flex-1 py-2 text-center bg-white text-green-600 font-bold shadow-sm rounded-lg transition-all";
+            document.getElementById('btn-mode-merchant').className = !isMerch ? "flex-1 py-2 text-center text-gray-500 hover:text-gray-700 font-medium transition-colors rounded-lg" : "flex-1 py-2 text-center bg-white text-orange-600 font-bold shadow-sm rounded-lg transition-all";
+            if(isMerch) listenToProducts((prods)=>{
+                 const c = document.getElementById('passenger-marketplace-list'); if(!c)return;
+                 c.innerHTML = prods.length ? prods.map(p => `<div class="bg-white p-3 rounded-lg border border-gray-200 flex justify-between items-center"><div><h4 class="font-bold text-gray-800 text-sm">${p.name}</h4><div class="text-[10px] text-gray-500">${p.merchantName}</div><span class="text-xs text-orange-600 font-bold">Rp ${parseInt(p.price).toLocaleString()}</span></div><button onclick="window.addToCart('${p.id}','${p.name}',${p.price},'${p.merchantName}')" class="bg-green-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-green-600">Tambah</button></div>`).join('') : 'Kosong';
+            });
+            window.updatePricesUI();
+        };
+        // ... (Cart, Map, Distance logic same as V6, re-added here)
+        window.handleInput = (t, v) => { if(v.length<3){document.getElementById(`suggestions-${t}`).style.display='none';return;} setTimeout(async()=>{try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${v}&countrycodes=id&limit=5`);const d=await r.json();const ul=document.getElementById(`suggestions-${t}`);ul.innerHTML='';ul.style.display='block';d.forEach(p=>{const li=document.createElement('li');li.innerText=p.display_name.split(',').slice(0,3).join(',');li.onclick=()=>{locationState[t].lat=p.lat;locationState[t].lon=p.lon;document.getElementById(`input-${t}`).value=li.innerText;ul.style.display='none';window.calculateDistance();};ul.appendChild(li);});}catch(e){}},500); };
+        window.getLocation = (t) => { navigator.geolocation.getCurrentPosition(async(p)=>{try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${p.coords.latitude}&lon=${p.coords.longitude}`);const d=await r.json();locationState[t].lat=p.coords.latitude;locationState[t].lon=p.coords.longitude;document.getElementById(`input-${t}`).value=d.display_name.split(',').slice(0,3).join(',');window.calculateDistance();}catch(e){}}); };
+        window.calculateDistance = () => { if(locationState.pickup.lat && locationState.destination.lat) { const R=6371, dLat=(locationState.destination.lat-locationState.pickup.lat)*Math.PI/180, dLon=(locationState.destination.lon-locationState.pickup.lon)*Math.PI/180; const a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(locationState.pickup.lat*Math.PI/180)*Math.cos(locationState.destination.lat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2); locationState.distance=(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))).toFixed(2); document.getElementById('distance-info').classList.remove('hidden'); document.getElementById('dist-val').innerText=locationState.distance+" km"; window.updatePricesUI(); } };
+        window.updatePricesUI = () => { const d=parseFloat(locationState.distance); const ip = locationState.mode === 'merchant' ? (cart.reduce((a,b)=>a+(b.price*b.qty),0)) : 0; const pMotor=d<=1?10000:10000+((d-1)*1700); const pMobil=d<=1?20000:20000+((d-1)*3000); const pPickup=d<=1?40000:40000+((d-1)*5000); if(document.getElementById('price-motor')) document.getElementById('price-motor').innerText = "Rp "+(Math.ceil((pMotor+ip)/100)*100).toLocaleString(); if(document.getElementById('price-mobil')) document.getElementById('price-mobil').innerText = "Rp "+(Math.ceil((pMobil+ip)/100)*100).toLocaleString(); if(document.getElementById('price-pickup')) document.getElementById('price-pickup').innerText = "Rp "+(Math.ceil((pPickup+ip)/100)*100).toLocaleString(); };
+        window.addToCart=(id,n,p,m)=>{const x=cart.find(i=>i.id===id); if(x)x.qty++; else cart.push({id,name:n,price:p,merchant:m,qty:1}); window.renderCart(); window.updatePricesUI();};
+        window.removeFromCart=(id)=>{const i=cart.findIndex(x=>x.id===id); if(i>-1){if(cart[i].qty>1)cart[i].qty--;else cart.splice(i,1);} window.renderCart(); window.updatePricesUI();};
+        window.renderCart=()=>{const c=document.getElementById('cart-items');if(c)c.innerHTML=cart.length?cart.map(i=>`<div class="flex justify-between text-xs mb-1"><span>${i.name} x${i.qty}</span><span>Rp ${(i.price*i.qty).toLocaleString()}</span><button onclick="window.removeFromCart('${i.id}')" class="text-red-500 font-bold ml-2">-</button></div>`).join(''):'Kosong';};
 
-            const createOrder = async () => {
-                if(!price) return alert("Lokasi belum lengkap");
-                let detailStr = orderDetail;
-                let mName = null;
-                if(['food','laundry'].includes(activeMenu)) {
-                   if(Object.keys(cart).length === 0) return alert("Pilih menu dulu");
-                   detailStr = Object.values(cart).map(i => `${i.qty}x ${i.name}`).join(', ');
-                   if(selMerchant) {
-                        const m = merchants.find(x => x.id === selMerchant);
-                        if(m) mName = m.shopName || m.name;
-                   }
-                }
-                const order = {
-                    customer: user.name, wa: user.wa,
-                    pickup: pickup.name, dropoff: dropoff.name,
-                    pickupLat: pickup.lat, pickupLng: pickup.lng,
-                    dropoffLat: dropoff.lat, dropoffLng: dropoff.lng,
-                    price, itemCost, distance: dist, 
-                    type: activeMenu === 'pesan' ? (vehicle === 'Motor' ? 'ride' : vehicle === 'Mobil' ? 'ride_car' : 'ride_pickup') : (activeMenu === 'food' ? 'food' : activeMenu === 'laundry' ? 'laundry' : 'delivery'),
-                    vehicle: vehicle, orderDetail: detailStr, merchantName: mName,
-                    status: 'pending', createdAt: new Date().toISOString(), isPaidOut: false, isMerchantPaid: false
-                };
-                const ref = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), order);
-                alert("Order Terkirim!");
-                setCart({}); setPrice(0); setPickup(null); setDropoff(null);
-                setTrackId(ref.id); setActiveMenu('tracking');
-            };
+        // --- DRIVER & MERCHANT ---
+        window.renderDriver = () => {
+            document.getElementById('content-container').innerHTML = `<div class="bg-green-600 text-white p-6 rounded-3xl mb-6 shadow-lg"><h1 class="text-2xl font-bold">Driver Mode</h1><button onclick="window.toggleDriverStatus()" id="drv-status-btn" class="bg-white text-blue-600 px-4 py-2 rounded-full text-sm font-bold mt-2">Status: OFF</button></div><h3 class="font-bold mb-3">Order Masuk</h3><div id="driver-orders" class="space-y-3"><p class="text-center text-gray-400">Menunggu order...</p></div>`;
+            const q = query(collection(db,'artifacts',APP_ID,'public','transactions'), limit(50));
+            unsubs.push(onSnapshot(q, (s) => {
+                const c=document.getElementById('driver-orders'); if(!c)return;
+                let h=''; s.forEach(x=>{ const d=x.data(); if(d.status==='Menunggu' && driverData.isOnline) h+=`<div class="bg-white p-4 rounded border-l-4 border-green-500"><div class="font-bold">${d.type}</div><div>${d.pickup}->${d.destination}</div><button onclick="window.acceptOrder('${x.id}')" class="w-full bg-green-500 text-white rounded py-1 mt-2">Ambil</button></div>`; });
+                c.innerHTML = h || '<p class="text-center text-gray-400">Sepi...</p>';
+                document.getElementById('drv-status-btn').innerText = `Status: ${driverData.isOnline?'ON':'OFF'}`;
+            }));
+        };
+        window.toggleDriverStatus=()=>{ if(driverData){ driverData.isOnline=!driverData.isOnline; window.renderDriver(); } };
+        window.acceptOrder=async(id)=>{ try{ await updateDoc(doc(db,'artifacts',APP_ID,'public','transactions',id),{status:'Menjemput', driverName:driverData.name}); showToast("Order Diambil"); }catch(e){showToast("Gagal","error");} };
 
-            const updateOrder = async (oid, data) => {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', oid), data);
-            };
+        window.renderMerchant = () => {
+            document.getElementById('content-container').innerHTML = `<div class="bg-orange-500 p-6 rounded-3xl text-white mb-6"><h1 class="text-2xl font-bold">${merchantData.name}</h1></div><div class="bg-white p-4 rounded-xl border"><h3 class="font-bold mb-2">Tambah Menu</h3><input id="prod-name" class="w-full border p-2 rounded mb-2" placeholder="Nama"><input id="prod-price" type="number" class="w-full border p-2 rounded mb-2" placeholder="Harga"><button onclick="window.addProduct()" class="w-full bg-orange-500 text-white py-2 rounded font-bold">Simpan</button></div><div id="merch-list" class="mt-4 space-y-2"></div>`;
+            listenToProducts((p)=>{ const c=document.getElementById('merch-list'); if(c) c.innerHTML=p.map(x=>`<div class="bg-white p-3 border rounded flex justify-between"><span>${x.name}</span><span class="font-bold">Rp ${x.price}</span></div>`).join(''); });
+        };
+        window.addProduct=async()=>{ const n=document.getElementById('prod-name').value, p=document.getElementById('prod-price').value; if(!n||!p)return; try{ await addDoc(collection(db,'artifacts',APP_ID,'public','data','products'),{name:n,price:p,merchantName:merchantData.name,timestamp:serverTimestamp()}); showToast("Menu Ditambah"); }catch(e){} };
+        function listenToProducts(cb){ const q=query(collection(db,'artifacts',APP_ID,'public','data','products'), limit(50)); unsubs.push(onSnapshot(q,(s)=>{ const d=[]; s.forEach(x=>d.push({id:x.id,...x.data()})); cb(d); })); }
 
-            const cancelOrder = async (orderId) => {
-                setProcessingOrder(orderId);
-                try {
-                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId);
-                    await updateDoc(orderRef, { status: 'cancelled' });
-                    alert("Pesanan berhasil dibatalkan.");
-                    if (activeMenu === 'tracking') { setActiveMenu('dashboard'); setTrackId(null); }
-                } catch (err) { alert("Gagal batal."); } finally { setProcessingOrder(null); }
-            };
-
-            const acceptOrder = async (orderId) => {
-                setProcessingOrder(orderId);
-                try {
-                    const dName = user.name || 'Driver';
-                    const dWA = user.wa || '-';
-                    const dPlate = user.plate || '-';
-                    const dMotor = user.motor || '-';
-                    const dVehicle = user.vehicleType || 'Motor';
-                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId);
-                    await updateDoc(orderRef, {
-                        status: 'accepted', driverName: dName, driverWA: dWA, driverPlate: dPlate, driverMotor: dMotor, driverVehicle: dVehicle, takenAt: new Date().toISOString()
-                    });
-                    alert("Order diambil!");
-                    if(user.role === 'driver') setActiveMenu('dashboard'); 
-                } catch (err) { alert("Gagal ambil."); } finally { setProcessingOrder(null); }
-            };
-
-            const completeOrder = async (orderId) => {
-                setCompletingOrder(orderId);
-                try {
-                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId);
-                    await updateDoc(orderRef, { status: 'completed', completedAt: new Date().toISOString() });
-                    alert("Selesai!");
-                } catch (err) { alert("Gagal selesai."); } finally { setCompletingOrder(null); }
-            };
-            
-            const toggleDriverStatus = async (driverId, currentStatus) => {
-                setProcessingDriverId(driverId); 
-                const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
-                try {
-                    const driverRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', driverId);
-                    await updateDoc(driverRef, { status: newStatus });
-                    setDrivers(prev => prev.map(d => d.id === driverId ? { ...d, status: newStatus } : d));
-                } catch (err) { alert("Gagal ubah status."); } finally { setProcessingDriverId(null); }
-            };
-
-            const markAsPaid = async (rowKey, orderIds, type) => {
-                setMarkingPaid(rowKey);
-                try {
-                    const batch = writeBatch(db);
-                    const field = type === 'driver' ? 'isPaidOut' : 'isMerchantPaid';
-                    orderIds.forEach(id => {
-                        const ref = doc(db, 'artifacts', appId, 'public', 'data', 'orders', id);
-                        batch.update(ref, { [field]: true });
-                    });
-                    await batch.commit();
-                } catch (e) { alert("Gagal update"); } finally { setMarkingPaid(null); }
-            };
-
-            const getMyOrders = () => {
-                if(!user) return [];
-                if(user.role === 'user') return orders;
-                return orders.filter(o => {
-                    if(user.role === 'driver') return o.driverWA === user.wa;
-                    if(user.role === 'merchant') return o.merchantName === (user.shopName || user.name);
-                    return o.wa === user.wa;
-                });
-            };
-
-            const getMenuItems = () => { 
-                const r = user?.role; 
-                if(r==='user') return [{id:'dashboard',label:'Beranda',icon:Home},{id:'all_transactions',label:'Semua Riwayat',icon:FileText},{id:'drivers',label:'Kelola Driver',icon:UserCog},{id:'finance',label:'Laporan Keuangan',icon:Banknote},{id:'pesan',label:'Tes Order',icon:PlusCircle},{id:'order_in',label:'Monitor',icon:Navigation}];
-                if(r==='driver') return [{id:'dashboard',label:'Beranda',icon:Home},{id:'order_in',label:'Orderan Masuk',icon:Navigation},{id:'history',label:'Riwayat',icon:History}];
-                if(r==='merchant') return [{id:'dashboard',label:'Beranda',icon:Home},{id:'manage_menu',label:'Kelola Menu',icon:ListPlus},{id:'history',label:'Riwayat',icon:History}];
-                return [{id:'dashboard',label:'Beranda',icon:Home},{id:'pesan',label:'Pesan Ojek',icon:PlusCircle},{id:'food',label:'Pesan Makanan',icon:Utensils},{id:'laundry',label:'Pesan Laundry',icon:Shirt},{id:'paket',label:'Kirim Paket',icon:Package},{id:'history',label:'Riwayat',icon:History}];
-            };
-            
-            const verifyFinancePin = (e) => {
-              e.preventDefault();
-              if (financePinInput === OWNER_SECRET_PIN) { setFinUnlocked(true); setShowFinancePinModal(false); setFinancePinInput(''); setActiveMenu('finance'); } 
-              else { alert("PIN Owner Salah!"); }
-            };
-
-            const handleFinanceMenuClick = () => {
-                if (finUnlocked) setActiveMenu('finance');
-                else { setShowFinancePinModal(true); setMobileMenu(false); }
-            };
-
-            const downloadReport = (list, type) => {
-                const headers = ["Tanggal", type === 'driver' ? "Nama Driver" : "Nama Merchant", "Total Order", "Total", "Potongan", "Bersih", "Status"];
-                const rows = list.map(i => [i.date, i.name, i.totalOrders, i.gross, i.gross*ADMIN_FEE, i.gross-(i.gross*ADMIN_FEE), i.allPaid?"Lunas":"Belum"].join(","));
-                const csv = [headers.join(","), ...rows].join("\n");
-                const blob = new Blob([csv], {type:'text/csv'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = 'laporan.csv'; a.click();
-            };
-
-            // --- RENDER SCREENS ---
-            if(screen === 'landing') return (
-                <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-orange-400 via-red-500 to-pink-500 font-sans">
-                    <div className="max-w-4xl w-full text-center">
-                        <h1 className="text-6xl font-extrabold text-white drop-shadow-lg mb-4">Ojek<span className="text-yellow-500 bg-white px-2 rounded-lg ml-1">Warga</span></h1>
-                        <p className="text-white text-xl font-medium drop-shadow-md mb-12 opacity-90">Siap Antar, Siap Jaga Warga</p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                            {[
-                              { id: 'driver', label: 'Driver', icon: Bike, color: 'text-green-600' },
-                              { id: 'customer', label: 'Penumpang', icon: User, color: 'text-blue-600' },
-                              { id: 'merchant', label: 'Merchant', icon: Store, color: 'text-orange-600' },
-                              { id: 'user', label: 'Admin', icon: LayoutDashboard, color: 'text-purple-600' }
-                            ].map(role => (
-                              <button key={role.id} type="button" onClick={() => { setRole(role.id); setScreen(role.id==='user'?'pin_admin':'check'); setForm({wa:'',pin:''}); }} 
-                                className="group bg-white hover:bg-gray-50 p-8 rounded-3xl shadow-2xl transition-all transform hover:-translate-y-2 active:scale-95 border-b-8 border-gray-200 active:border-b-0">
-                                <div className="bg-gray-50 p-6 rounded-full mb-6 mx-auto w-fit shadow-inner"><role.icon size={48} className={role.color}/></div>
-                                <h2 className="text-xl font-bold text-gray-800">{role.label}</h2>
-                              </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            );
-
-            if(screen === 'check') return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-                        <h2 className="text-xl font-bold mb-4">Login {role}</h2>
-                        <input className="w-full border p-3 rounded-lg mb-4" placeholder="Nomor WhatsApp" value={form.wa} onChange={e=>setForm({...form, wa:e.target.value})}/>
-                        <button type="button" onClick={checkWA} className="w-full bg-orange-500 text-white p-3 rounded-lg font-bold hover:bg-orange-600">Lanjut</button>
-                        <button type="button" onClick={()=>setScreen('landing')} className="w-full mt-3 text-gray-400 text-sm">Batal</button>
-                    </div>
-                </div>
-            );
-
-            if(screen === 'pin' || screen === 'pin_admin') return (
-                <div className="min-h-screen flex items-center justify-center p-6">
-                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center">
-                        <h2 className="text-xl font-bold mb-4">Masukkan PIN</h2>
-                        <input type="password" className="w-full border p-3 rounded-lg mb-4 text-center text-2xl tracking-widest" maxLength={6} onChange={e=>setInputPin(e.target.value)} autoFocus />
-                        <button type="button" onClick={() => {
-                            if(screen === 'pin_admin') {
-                                if(inputPin === '888888') {
-                                    const admin = { name: 'Super Admin', role: 'user', wa: '000' };
-                                    localStorage.setItem('ojekWargaUser', JSON.stringify(admin));
-                                    setUser(admin); setScreen('dashboard');
-                                } else alert("PIN Salah");
-                            } else login();
-                        }} className="w-full bg-orange-500 text-white p-3 rounded-lg font-bold hover:bg-orange-600">Masuk</button>
-                        {screen === 'pin' && <button type="button" onClick={()=>setShowForgotPin(true)} className="block w-full text-center text-sm text-blue-500 mt-4 font-bold">Lupa PIN?</button>}
-                    </div>
-                </div>
-            );
-
-            if(showForgotPin) return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md">
-                        <div className="text-center mb-6">
-                            <h2 className="text-xl font-bold">Lupa PIN?</h2>
-                            <p className="text-gray-500 text-xs mt-2">Hubungi Admin untuk Kode Otorisasi.</p>
-                            <a href={`https://wa.me/${formatWA(ADMIN_WA_NUMBER)}?text=Halo+Admin,+saya+lupa+PIN+akun+OjekWarga+saya+(No:+${form.wa}).+Mohon+bantuan+reset.`} target="_blank" className="flex items-center justify-center w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg mt-3 text-sm"><MessageCircle size={16} className="mr-2"/> Chat Admin Sekarang</a>
-                        </div>
-                        <div className="space-y-3">
-                            <input className="w-full p-3 border rounded-xl text-center font-bold" placeholder="Kode Otorisasi" value={otp} onChange={e=>setOtp(e.target.value)}/>
-                            <input className="w-full p-3 border rounded-xl text-center font-bold" placeholder="PIN Baru" maxLength={6} value={newPin} onChange={e=>setNewPin(e.target.value)}/>
-                            <button type="button" onClick={handleResetPin} className="w-full bg-red-500 text-white p-3 rounded-xl font-bold">{isResetting ? 'Memproses...' : 'Ganti PIN'}</button>
-                            <button type="button" onClick={()=>{setShowForgotPin(false); setOtp(''); setNewPin('');}} className="w-full text-gray-400 text-sm mt-2">Batal</button>
-                        </div>
-                    </div>
-                </div>
-            );
-
-            if(screen === 'register') return (
-                <div className="min-h-screen flex items-center justify-center p-6">
-                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-                        <h2 className="text-xl font-bold mb-4">Daftar Baru</h2>
-                        <div className="space-y-3">
-                            <input className="w-full border p-2 rounded" placeholder="Nama Lengkap" onChange={e => setForm({...form, name: e.target.value})}/>
-                            <input className="w-full border p-2 rounded" placeholder="Alamat Lengkap" onChange={e => setForm({...form, address: e.target.value})}/>
-                            <input className="w-full border p-2 rounded" type="password" placeholder="Buat PIN (6 Angka)" onChange={e => setForm({...form, pin: e.target.value})}/>
-                            {role === 'merchant' && <input className="w-full border p-2 rounded" placeholder="Nama Toko" onChange={e => setForm({...form, shopName: e.target.value})}/>}
-                            {role === 'driver' && (
-                                <div className="grid grid-cols-2 gap-2">
-                                    <select className="w-full border p-2 rounded" onChange={e => setForm({...form, vehicleType: e.target.value})}><option>Motor</option><option>Mobil</option><option>Pickup</option></select>
-                                    <input className="w-full border p-2 rounded" placeholder="Plat Nomor" onChange={e => setForm({...form, plate: e.target.value})}/>
-                                </div>
-                            )}
-                        </div>
-                        <button type="button" onClick={register} className="w-full bg-green-600 text-white p-3 rounded-lg font-bold mt-4">Daftar</button>
-                    </div>
-                </div>
-            );
-
-            // --- DASHBOARD LAYOUT ---
-            return (
-                <div className="flex h-screen bg-gray-50 font-sans">
-                    <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r transform transition-transform ${mobileMenu ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 flex flex-col`}>
-                        <div className="p-6 font-extrabold text-2xl text-orange-600 flex items-center"><Bike className="text-yellow-500 mr-2"/> OjekWarga</div>
-                        <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-                            {getMenuItems().map(item => (
-                                <button key={item.id} onClick={() => { if (item.id === 'financials') handleFinanceMenuClick(); else setActiveMenu(item.id); }} className={`w-full text-left p-3 rounded-lg flex items-center ${activeMenu===item.id?'bg-blue-50 text-blue-600':''}`}><item.icon size={18} className="mr-3"/> {item.label}</button>
-                            ))}
-                        </nav>
-                        <button onClick={logout} className="p-3 text-red-500 flex items-center"><LogOut size={18} className="mr-3"/> Keluar</button>
-                    </aside>
-
-                    <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                        <header className="md:hidden mb-4 flex justify-between"><div className="font-bold text-orange-600">OjekWarga</div><button onClick={()=>setMobileMenu(!mobileMenu)}><Menu/></button></header>
-                        
-                        {activeMenu === 'dashboard' && (
-                            <div className="max-w-2xl mx-auto">
-                                <h2 className="text-2xl font-bold mb-6">Halo, {user.name}</h2>
-                                <div className="bg-gradient-to-r from-orange-500 to-pink-500 p-6 rounded-2xl shadow-lg mb-6 text-white">
-                                    <h3 className="font-bold text-lg mb-2 flex items-center"><Headphones className="mr-2"/> Pusat Bantuan</h3>
-                                    <div className="flex gap-3 mt-3">
-                                        <a href={`https://wa.me/${formatWA(ADMIN_WA_NUMBER)}`} target="_blank" className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center hover:bg-gray-100"><MessageCircle size={16} className="mr-2"/> Admin 1</a>
-                                         <a href="https://wa.me/6281299988548" target="_blank" className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center hover:bg-gray-100"><MessageCircle size={16} className="mr-2"/> Admin 2</a>
-                                    </div>
-                                </div>
-                                {user.role === 'driver' && (
-                                    <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm mb-4">
-                                        <span className="font-bold text-gray-700">Status Driver</span>
-                                        <button onClick={async () => {
-                                            const s = !user.isOnline;
-                                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', sanitizeId(user.wa)), {isOnline: s});
-                                            const u = {...user, isOnline: s}; setUser(u); localStorage.setItem('ow_user', JSON.stringify(u));
-                                        }} className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center ${user.isOnline ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
-                                            {user.isOnline ? 'ON' : 'OFF'}
-                                        </button>
-                                    </div>
-                                )}
-                                {getMyOrders().filter(o => (o.status === 'pending' || o.status === 'accepted')).map(order => (
-                                    <Card key={order.id} className="mb-3 border-l-4 border-blue-500">
-                                        <div className="flex justify-between">
-                                            <div>
-                                                <Badge status={order.status} type={order.type}/>
-                                                <div className="font-bold mt-1">{order.pickup} &rarr; {order.dropoff}</div>
-                                                <div className="text-sm text-gray-500">Rp {order.price.toLocaleString()}</div>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                {user.role === 'driver' && order.status === 'pending' && (
-                                                    <button type="button" onClick={() => acceptOrder(order.id)} disabled={processingOrder===order.id} className="bg-yellow-400 px-4 py-2 rounded font-bold text-sm">{processingOrder===order.id ? '...' : 'Ambil'}</button>
-                                                )}
-                                                {user.role === 'driver' && order.status === 'accepted' && (
-                                                    <button type="button" onClick={() => completeOrder(order.id)} disabled={completingOrder===order.id} className="bg-blue-600 text-white px-4 py-2 rounded font-bold text-sm">{completingOrder===order.id ? '...' : 'Selesai'}</button>
-                                                )}
-                                                {user.role === 'customer' && order.status === 'pending' && (
-                                                    <button type="button" onClick={() => cancelOrder(order.id)} disabled={processingOrder===order.id} className="bg-red-100 text-red-600 px-4 py-2 rounded font-bold text-sm hover:bg-red-200">Batalkan</button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </Card>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* ... ORDER FORMS ... */}
-                        {['pesan', 'food', 'laundry', 'paket'].includes(activeMenu) && (
-                            <div className="max-w-xl mx-auto">
-                                <h2 className="text-2xl font-bold mb-4 capitalize">Pesan {activeMenu === 'pesan' ? 'Ojek' : activeMenu}</h2>
-                                <Card>
-                                    {activeMenu === 'pesan' && (
-                                        <div className="grid grid-cols-3 gap-2 mb-4">
-                                            {['Motor', 'Mobil', 'Pickup'].map(v => (
-                                                <button key={v} onClick={() => setVehicle(v)} className={`py-2 text-xs font-bold rounded-lg border ${vehicle===v ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600'}`}>{v}</button>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {['food', 'laundry'].includes(activeMenu) && (
-                                        <div className="mb-4">
-                                            <label className="block text-xs font-bold mb-1">Pilih Mitra</label>
-                                            <select onChange={(e) => {
-                                                setSelMerchant(e.target.value);
-                                                loadMenu(e.target.value);
-                                                const m = merchants.find(x=>x.id===e.target.value);
-                                                if(m) getCoordinates(m.address).then(c => { if(c) setPickup({name:c.name, lat:c.lat, lng:c.lng}) });
-                                            }} className="w-full p-2 border rounded bg-white" onFocus={async () => {
-                                                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where('role', '==', 'merchant'));
-                                                const s = await getDocs(q);
-                                                setMerchants(s.docs.map(d => ({id:d.id, ...d.data()})));
-                                            }}>
-                                                <option value="">-- Pilih --</option>
-                                                {merchants.map(m => <option key={m.id} value={m.id}>{m.shopName || m.name}</option>)}
-                                            </select>
-                                            {selMerchant && menu.length > 0 && (
-                                                <div className="mt-4 border rounded p-2">
-                                                    {menu.map(item => (
-                                                        <div key={item.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                                                            <div><div className="font-bold text-sm">{item.name}</div><div className="text-xs text-gray-500">Rp {item.price.toLocaleString()}</div></div>
-                                                            <div className="flex items-center gap-2">
-                                                                <button onClick={() => updateCart(item, -1)} className="px-2 bg-gray-200 rounded">-</button>
-                                                                <span className="text-sm font-bold">{cart[item.id]?.qty || 0}</span>
-                                                                <button onClick={() => updateCart(item, 1)} className="px-2 bg-gray-200 rounded">+</button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    <div className="mt-2 pt-2 border-t text-right font-bold text-orange-600">Total: Rp {itemCost.toLocaleString()}</div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    <LocationInput label="Lokasi Jemput" placeholder="Cari lokasi..." onSelect={setPickup} initialValue={pickup?.name} readOnly={false} />
-                                    <LocationInput label="Lokasi Tujuan" placeholder="Cari lokasi..." onSelect={setDropoff} />
-                                    {activeMenu === 'paket' && <div className="mb-3"><label className="text-xs font-bold">Penerima</label><input className="w-full p-2 border rounded" onChange={e=>setOrderDetail(e.target.value)}/></div>}
-                                    <div className="bg-gray-50 p-4 rounded mt-4 mb-4 text-sm">
-                                        <div className="flex justify-between text-blue-600"><span>Ongkir:</span> <b>Rp {price.toLocaleString()}</b></div>
-                                        {itemCost > 0 && <div className="flex justify-between text-green-600 pt-2 border-t mt-2"><span>Total Bayar:</span> <b>Rp {(price + itemCost).toLocaleString()}</b></div>}
-                                        {loading && <div className="text-center text-xs text-blue-500 mt-2">Menghitung...</div>}
-                                    </div>
-                                    <button onClick={createOrder} disabled={!price || loading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-orange-600 disabled:opacity-50">{loading ? 'Memproses...' : 'Pesan Sekarang'}</button>
-                                </Card>
-                            </div>
-                        )}
-                        
-                        {activeMenu === 'order_in' && (
-                            <div className="max-w-4xl mx-auto">
-                                <h2 className="text-2xl font-bold mb-4">Order Masuk</h2>
-                                {orders.filter(o => o.status === 'pending').map(order => (
-                                    <Card key={order.id} className="mb-4 border-l-4 border-yellow-400">
-                                        <div className="flex justify-between mb-2"><div className="font-bold">{order.customer}</div><div className="text-green-600 font-bold">Rp {order.price.toLocaleString()}</div></div>
-                                        <div className="text-sm text-gray-600 mb-4"><div>Jemput: {order.pickup}</div><div>Tujuan: {order.dropoff}</div></div>
-                                        <button onClick={() => acceptOrder(order.id)} disabled={processingOrder === order.id} className="w-full mt-4 bg-yellow-400 font-bold py-3 rounded-xl">{processingOrder === order.id ? 'Proses...' : 'Ambil Order'}</button>
-                                    </Card>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* --- ADMIN SECTIONS --- */}
-                        {activeMenu === 'drivers' && (
-                             <div className="max-w-4xl mx-auto">
-                                <h2 className="text-2xl font-bold mb-4">Kelola Driver</h2>
-                                <button onClick={async()=>{const q=query(collection(db,'artifacts',appId,'public','data','users'),where('role','==','driver'));const s=await getDocs(q);setDrivers(s.docs.map(d=>({id:d.id,...d.data()})))}} className="mb-4 text-blue-600 text-sm font-bold">Refresh Data</button>
-                                <div className="grid gap-3">
-                                    {drivers.map(d => (
-                                        <div key={d.id} className="bg-white p-4 rounded shadow mb-2 flex justify-between items-center">
-                                            <div><div className="font-bold">{d.name} {d.status==='suspended' && <span className="text-red-500 text-xs ml-2">(SUSPENDED)</span>}</div><div className="text-sm text-gray-500">{d.wa} • {d.plate}</div></div>
-                                            <button onClick={() => toggleDriverStatus(d.id, d.status)} disabled={processingDriverId === d.id} className={`px-3 py-1 rounded text-xs font-bold text-white ${d.status==='suspended'?'bg-green-500':'bg-red-500'}`}>{processingDriverId === d.id ? '...' : (d.status==='suspended'?'Aktifkan':'Suspend')}</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Finance Modal */}
-                         {showFinancePinModal && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                                <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-                                    <h3 className="text-xl font-bold mb-2">Akses Terbatas</h3>
-                                    <p className="text-gray-500 text-sm mb-6">PIN Owner:</p>
-                                    <form onSubmit={verifyFinancePin}>
-                                        <input type="password" className="w-full p-3 border rounded-xl text-center text-xl tracking-widest font-bold mb-4" maxLength={6} value={financePinInput} onChange={e => setFinancePinInput(e.target.value)} autoFocus/>
-                                        <div className="flex gap-2">
-                                            <button type="button" onClick={() => setShowFinancePinModal(false)} className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl">Batal</button>
-                                            <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700">Buka</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        )}
-
-                        {activeMenu === 'finance' && (
-                             <div className="max-w-5xl mx-auto">
-                                <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">Laporan Keuangan</h2><div className="flex gap-2"><button onClick={()=>setFinanceTab('driver')} className={`px-3 py-1 rounded ${financeTab==='driver'?'bg-blue-600 text-white':'bg-white'}`}>Driver</button><button onClick={()=>setFinanceTab('merchant')} className={`px-3 py-1 rounded ${financeTab==='merchant'?'bg-blue-600 text-white':'bg-white'}`}>Merchant</button><button onClick={() => downloadReport(financialList, financeTab)} className="bg-green-600 text-white px-3 py-1 rounded font-bold text-sm">Excel</button></div></div>
-                                <div className="bg-white rounded-xl shadow overflow-x-auto">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-gray-100 border-b"><tr><th className="p-3">Tanggal</th><th className="p-3">Nama</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Potongan</th><th className="p-3 text-right text-green-600">Bersih</th><th className="p-3 text-center">Status</th></tr></thead>
-                                        <tbody>
-                                            {Object.values(orders.filter(o => o.status === 'completed').reduce((acc, o) => {
-                                                 const name = financeTab==='driver' ? o.driverName : o.merchantName;
-                                                 if((financeTab==='driver' && !name) || (financeTab==='merchant' && !name)) return acc;
-                                                 const k = `${name}-${o.createdAt.split('T')[0]}`;
-                                                 if(!acc[k]) acc[k] = { date: o.createdAt.split('T')[0], name, total: 0, gross: 0, ids: [], paid: true };
-                                                 acc[k].total++;
-                                                 acc[k].gross += (financeTab==='driver'?o.price:o.itemCost);
-                                                 acc[k].ids.push(o.id);
-                                                 if(financeTab==='driver'?!o.isPaidOut:!o.isMerchantPaid) acc[k].paid = false;
-                                                 return acc;
-                                            }, {})).map((i, idx) => (
-                                                <tr key={idx} className="border-b hover:bg-gray-50">
-                                                    <td className="p-3">{i.date}</td><td className="p-3 font-bold">{i.name}</td><td className="p-3 text-right">{i.gross.toLocaleString()}</td><td className="p-3 text-right text-red-500">{(i.gross*ADMIN_FEE).toLocaleString()}</td><td className="p-3 text-right font-bold text-green-600">{(i.gross*(1-ADMIN_FEE)).toLocaleString()}</td>
-                                                    <td className="p-3 text-center">{i.paid ? <span className="text-green-600 font-bold">Lunas</span> : <button onClick={() => markAsPaid(idx, i.ids, financeTab)} disabled={markingPaid === idx} className="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-bold">{markingPaid === idx ? '...' : 'Bayar'}</button>}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* --- TRACKING VIEW --- */}
-                        {activeMenu === 'tracking' && (
-                             <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden mt-4">
-                                {(() => {
-                                    const tOrder = orders.find(o => o.id === trackId);
-                                    if(!tOrder) return <div className="p-8 text-center">Order selesai atau batal. <button onClick={()=>setActiveMenu('dashboard')} className="text-blue-500 font-bold block mt-4">Kembali</button></div>;
-                                    return (
-                                        <>
-                                            <div className={`p-8 text-center text-white ${tOrder.status==='pending'?'bg-yellow-400':tOrder.status==='accepted'?'bg-blue-500':'bg-green-500'}`}>
-                                                <h2 className="text-2xl font-bold capitalize">{tOrder.status === 'pending' ? 'Mencari Driver...' : tOrder.status}</h2>
-                                            </div>
-                                            <div className="p-6">
-                                                <div className="space-y-4">
-                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Jemput</p><p className="font-bold">{tOrder.pickup}</p></div>
-                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Tujuan</p><p className="font-bold">{tOrder.dropoff}</p></div>
-                                                </div>
-                                                {tOrder.status === 'pending' && <button type="button" onClick={() => cancelOrder(tOrder.id)} disabled={processingOrder === tOrder.id} className="w-full mt-6 bg-red-100 text-red-600 py-3 rounded-xl font-bold">{processingOrder === tOrder.id ? '...' : 'Batalkan'}</button>}
-                                                {tOrder.status === 'completed' && <button onClick={() => setActiveMenu('dashboard')} className="w-full mt-6 bg-gray-900 text-white py-3 rounded-xl font-bold">Kembali</button>}
-                                            </div>
-                                        </>
-                                    );
-                                })()}
-                             </div>
-                        )}
-                        
-                        {/* ... OTHER MENUS (History, Profile) ... */}
-                        {activeMenu === 'history' && (
-                            <div className="max-w-4xl mx-auto"><h2 className="text-2xl font-bold mb-4">Riwayat</h2>{getMyOrders().map(order => (<div key={order.id} className="bg-white p-4 rounded shadow-sm flex justify-between mb-2"><div><div className="font-bold">{order.type}</div><div className="text-sm text-gray-500">{order.pickup} &rarr; {order.dropoff}</div></div><div className="text-right"><Badge status={order.status}/><div className="font-bold mt-1">Rp {order.price.toLocaleString()}</div></div></div>))}</div>
-                        )}
-                        {activeMenu === 'profile' && (
-                            <div className="max-w-lg mx-auto bg-white p-8 rounded-2xl shadow text-center"><div className="w-24 h-24 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-4xl font-bold mx-auto mb-4">{user.name.charAt(0)}</div><h2 className="text-2xl font-bold mb-1">{user.name}</h2><p className="text-gray-500 mb-6 capitalize">{user.role}</p><div className="bg-gray-50 p-4 rounded-xl text-left space-y-3 text-sm"><div><span className="block text-xs text-gray-400 uppercase">WhatsApp</span><span className="font-bold">{user.wa}</span></div><div><span className="block text-xs text-gray-400 uppercase">Alamat</span><span className="font-bold">{user.address}</span></div></div></div>
-                        )}
-
-                    </div>
-                </div>
-            );
-        }
-
-        const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        window.logout = () => location.reload();
+        window.confirmToAdmin = (ph) => window.open(`https://wa.me/${ph}`, '_blank');
     </script>
 </body>
 </html>
